@@ -1,16 +1,18 @@
-name: CI/CD
+name: CI
 
 on:
   pull_request:
   push:
     branches:
-      - main
+      - "**"
+    tags-ignore:
+      - "v*"
 
 permissions:
   contents: read
 
 concurrency:
-  group: machinalab-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,9 +25,12 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Rokit
-        uses: roblox-ts/setup-rokit@main
+        uses: CompeyDev/setup-rokit@v0.1.2
         with:
           cache: true
+
+      - name: Install toolchain
+        run: rokit install --no-trust-check
 
       - name: Verify tools
         run: |
@@ -33,7 +38,6 @@ jobs:
           rojo --version
           selene --version
           stylua --version
-          rbxcloud --version
 
       - name: Lint with Selene
         run: selene src
@@ -49,38 +53,3 @@ jobs:
         with:
           name: machinalab-build
           path: MachinaLab.rbxlx
-
-  deploy:
-    name: Publish to Roblox
-    runs-on: ubuntu-latest
-    needs: lint-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Rokit
-        uses: roblox-ts/setup-rokit@main
-        with:
-          cache: true
-
-      - name: Build release place
-        run: rojo build default.project.json -o MachinaLab.rbxlx
-
-      - name: Publish place with rbxcloud
-        env:
-          RBXCLOUD_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-          ROBLOX_UNIVERSE_ID: ${{ vars.ROBLOX_UNIVERSE_ID }}
-          ROBLOX_PLACE_ID: ${{ vars.ROBLOX_PLACE_ID }}
-        run: |
-          set -euo pipefail
-
-          # Show CLI info for logs
-          rbxcloud --version
-
-          # Publish using Open Cloud through rbxcloud
-          rbxcloud experience publish-place \
-            --universe-id "$ROBLOX_UNIVERSE_ID" \
-            --place-id "$ROBLOX_PLACE_ID" \
-            --file "MachinaLab.rbxlx"
