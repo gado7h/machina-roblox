@@ -3,13 +3,18 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*"
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build-and-release:
+  release:
+    name: Build and Publish
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +32,20 @@ jobs:
       - name: Install toolchain
         run: rokit install --no-trust-check
 
-      - name: Build with Rojo
+      - name: Verify tools
+        run: |
+          rokit --version
+          rojo --version
+          selene --version
+          stylua --version
+
+      - name: Lint with Selene
+        run: selene src
+
+      - name: Check formatting with StyLua
+        run: stylua --check src
+
+      - name: Build place
         run: rojo build default.project.json -o MachinaLab.rbxlx
 
       - name: Publish to Roblox
@@ -44,15 +62,8 @@ jobs:
             --header "Content-Type: application/octet-stream" \
             --data-binary @MachinaLab.rbxlx
 
-      - name: Restart live servers
-        env:
-          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-          ROBLOX_UNIVERSE_ID: ${{ vars.ROBLOX_UNIVERSE_ID }}
-        run: |
-          set -euo pipefail
-
-          curl --fail-with-body --request POST \
-            --url "https://apis.roblox.com/cloud/v2/universes/${ROBLOX_UNIVERSE_ID}:restartServers" \
-            --header "x-api-key: ${ROBLOX_API_KEY}" \
-            --header "Content-Type: application/json" \
-            --data '{}'
+      - name: Create GitHub release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MachinaLab.rbxlx
+          generate_release_notes: true
