@@ -11,7 +11,7 @@
       "Config": {
         "$path": "src/Machina/src/Config.luau"
       },
-            "net_bridge": {
+      "net_bridge": {
         "$path": "src/Machina/src/net_bridge"
       },
       "Host": {
