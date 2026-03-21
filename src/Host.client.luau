@@ -50,6 +50,90 @@ local SKY_PROPS = {
 	"SkyboxUp",
 }
 
+local ROBLOX_KEYCODE_TO_EMU_KEY = {
+	[Enum.KeyCode.A] = "A",
+	[Enum.KeyCode.B] = "B",
+	[Enum.KeyCode.C] = "C",
+	[Enum.KeyCode.D] = "D",
+	[Enum.KeyCode.E] = "E",
+	[Enum.KeyCode.F] = "F",
+	[Enum.KeyCode.G] = "G",
+	[Enum.KeyCode.H] = "H",
+	[Enum.KeyCode.I] = "I",
+	[Enum.KeyCode.J] = "J",
+	[Enum.KeyCode.K] = "K",
+	[Enum.KeyCode.L] = "L",
+	[Enum.KeyCode.M] = "M",
+	[Enum.KeyCode.N] = "N",
+	[Enum.KeyCode.O] = "O",
+	[Enum.KeyCode.P] = "P",
+	[Enum.KeyCode.Q] = "Q",
+	[Enum.KeyCode.R] = "R",
+	[Enum.KeyCode.S] = "S",
+	[Enum.KeyCode.T] = "T",
+	[Enum.KeyCode.U] = "U",
+	[Enum.KeyCode.V] = "V",
+	[Enum.KeyCode.W] = "W",
+	[Enum.KeyCode.X] = "X",
+	[Enum.KeyCode.Y] = "Y",
+	[Enum.KeyCode.Z] = "Z",
+	[Enum.KeyCode.Zero] = "Zero",
+	[Enum.KeyCode.One] = "One",
+	[Enum.KeyCode.Two] = "Two",
+	[Enum.KeyCode.Three] = "Three",
+	[Enum.KeyCode.Four] = "Four",
+	[Enum.KeyCode.Five] = "Five",
+	[Enum.KeyCode.Six] = "Six",
+	[Enum.KeyCode.Seven] = "Seven",
+	[Enum.KeyCode.Eight] = "Eight",
+	[Enum.KeyCode.Nine] = "Nine",
+	[Enum.KeyCode.Return] = "Return",
+	[Enum.KeyCode.Space] = "Space",
+	[Enum.KeyCode.Backspace] = "Backspace",
+	[Enum.KeyCode.Tab] = "Tab",
+	[Enum.KeyCode.Escape] = "Escape",
+	[Enum.KeyCode.LeftShift] = "LeftShift",
+	[Enum.KeyCode.RightShift] = "RightShift",
+	[Enum.KeyCode.LeftControl] = "LeftControl",
+	[Enum.KeyCode.RightControl] = "RightControl",
+	[Enum.KeyCode.LeftAlt] = "LeftAlt",
+	[Enum.KeyCode.RightAlt] = "RightAlt",
+	[Enum.KeyCode.CapsLock] = "CapsLock",
+	[Enum.KeyCode.F1] = "F1",
+	[Enum.KeyCode.F2] = "F2",
+	[Enum.KeyCode.F3] = "F3",
+	[Enum.KeyCode.F4] = "F4",
+	[Enum.KeyCode.F5] = "F5",
+	[Enum.KeyCode.F6] = "F6",
+	[Enum.KeyCode.F7] = "F7",
+	[Enum.KeyCode.F8] = "F8",
+	[Enum.KeyCode.F9] = "F9",
+	[Enum.KeyCode.F10] = "F10",
+	[Enum.KeyCode.F11] = "F11",
+	[Enum.KeyCode.F12] = "F12",
+	[Enum.KeyCode.Up] = "Up",
+	[Enum.KeyCode.Down] = "Down",
+	[Enum.KeyCode.Left] = "Left",
+	[Enum.KeyCode.Right] = "Right",
+	[Enum.KeyCode.Delete] = "Delete",
+	[Enum.KeyCode.Insert] = "Insert",
+	[Enum.KeyCode.Home] = "Home",
+	[Enum.KeyCode.End] = "End",
+	[Enum.KeyCode.PageUp] = "PageUp",
+	[Enum.KeyCode.PageDown] = "PageDown",
+	[Enum.KeyCode.Minus] = "Minus",
+	[Enum.KeyCode.Equals] = "Equals",
+	[Enum.KeyCode.LeftBracket] = "LeftBracket",
+	[Enum.KeyCode.RightBracket] = "RightBracket",
+	[Enum.KeyCode.Semicolon] = "Semicolon",
+	[Enum.KeyCode.Quote] = "Quote",
+	[Enum.KeyCode.Backquote] = "Backquote",
+	[Enum.KeyCode.BackSlash] = "BackSlash",
+	[Enum.KeyCode.Comma] = "Comma",
+	[Enum.KeyCode.Period] = "Period",
+	[Enum.KeyCode.Slash] = "Slash",
+}
+
 local THEME = {
 	Text = Color3.fromRGB(238, 241, 245),
 	MutedText = Color3.fromRGB(138, 147, 160),
@@ -165,8 +249,18 @@ local function setModelVisibleLocal(model: Instance?, visible: boolean)
 			obj.LocalTransparencyModifier = transparency
 		elseif obj:IsA("Decal") or obj:IsA("Texture") then
 			obj.Transparency = transparency
+		elseif obj:IsA("ParticleEmitter") 
+			or obj:IsA("Trail") 
+			or obj:IsA("Beam") then
+			obj.Enabled = visible
+		elseif obj:IsA("SurfaceAppearance") then
+			obj.AlphaMode = visible and Enum.AlphaMode.Overlay or Enum.AlphaMode.Transparency
 		end
 	end
+	
+	model.DescendantAdded:Once(function(descendant)
+		setModelVisibleLocal(model, visible)
+	end)
 end
 
 local function destroySpectateScreenMirror()
@@ -664,7 +758,6 @@ local function powerOn()
 	end
 
 	machine:powerOn()
-	machine:bindInput(UserInputService)
 	updateStage()
 end
 
@@ -1069,11 +1162,23 @@ local function setupInput()
 			isPanning = true
 			lastMousePos = Vector2.new(input.Position.X, input.Position.Y)
 		end
+
+		if input.UserInputType == Enum.UserInputType.Keyboard and machine and machine.isPowered and machine:isPowered() then
+			local emuKey = ROBLOX_KEYCODE_TO_EMU_KEY[input.KeyCode]
+			if emuKey then
+				machine:keyDown(emuKey)
+			end
+		end
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			isPanning = false
+		elseif input.UserInputType == Enum.UserInputType.Keyboard and machine and machine.isPowered and machine:isPowered() then
+			local emuKey = ROBLOX_KEYCODE_TO_EMU_KEY[input.KeyCode]
+			if emuKey then
+				machine:keyUp(emuKey)
+			end
 		end
 	end)
 
@@ -1137,8 +1242,11 @@ local function main()
 	})
 	ui.imageLabel.ImageContent = Content.fromObject(editableImage)
 
-	machine = PcSystem.new(Config, editableImage)
+	machine = PcSystem.new(Config)
 	machine.display = editableImage
+	machine:setFramePresenter(function(pixelBuffer, width, height)
+		editableImage:WritePixelsBuffer(Vector2.zero, Vector2.new(width, height), pixelBuffer)
+	end)
 
 	setupInput()
 	setupIcons()
