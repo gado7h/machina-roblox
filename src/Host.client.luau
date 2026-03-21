@@ -1,6 +1,5 @@
 -- This is only for local repository and should be created by users
 
---// Services
 local AssetService = game:GetService("AssetService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -8,7 +7,6 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
---// Player / Workspace
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local currentCamera = workspace.CurrentCamera
@@ -17,7 +15,6 @@ local deskInstance = workspace:WaitForChild(("%s_DESK"):format(player.Name))
 local cameraPart: Part = deskInstance:WaitForChild("CAM")
 local screen: Part = deskInstance:WaitForChild("SCREEN")
 
---// Modules
 local Icon = require(script.Parent.Parent.Packages.TopbarPlus)
 local Skyboxes = require(script.Parent.Skyboxes)
 local remote = script.Parent.Parent:WaitForChild("MachinaRemote") :: RemoteFunction
@@ -25,7 +22,6 @@ local remote = script.Parent.Parent:WaitForChild("MachinaRemote") :: RemoteFunct
 local Config = require(script.Parent.Parent.Config)
 local PcSystem = require(script.Parent.Parent.platforms.x86.PcSystem)
 
---// Constants
 local DEFAULT_SKYBOX = "Baltic Dune"
 local AUTO_POWER = true
 
@@ -68,7 +64,6 @@ local STAGE_COLORS = {
 	FAULT = THEME.Danger,
 }
 
---// Types
 type SpectateState = {
 	targetUserId: number?,
 	targetName: string?,
@@ -79,7 +74,6 @@ type SpectateState = {
 	targetScreenImageLabel: ImageLabel?,
 }
 
---// State
 local machine
 local ui
 
@@ -107,7 +101,6 @@ local spectateState: SpectateState = {
 local spectateDropdownIcons = {}
 local localSkyboxName = DEFAULT_SKYBOX
 
---// Helpers
 local function lerp(a, b, t)
 	return a + (b - a) * t
 end
@@ -217,7 +210,6 @@ local function createSpectateScreenMirror(targetDesk: Model)
 	spectateState.targetScreenImageLabel = imageLabel
 end
 
---// Character visibility
 local function setCharacterVisible(visible: boolean)
 	local character = player.Character
 	if not character then
@@ -243,7 +235,6 @@ player.CharacterAdded:Connect(function()
 	end
 end)
 
---// Message UI
 local function showMessage(title: string, text: string, color: Color3?, duration: number?)
 	if not ui or not ui.messageFrame then
 		return
@@ -268,7 +259,6 @@ local function showMessage(title: string, text: string, color: Color3?, duration
 	end)
 end
 
---// Skybox
 local function getSkyboxByName(name: string)
 	for _, skyData in ipairs(Skyboxes) do
 		if skyData.Name == name then
@@ -311,7 +301,6 @@ local function applySkyboxByName(name: string)
 	end
 end
 
---// Camera
 local function resetCamera()
 	cameraOffset = Vector2.zero
 	currentCamera.FieldOfView = CAMERA_FOV_DEFAULT
@@ -328,7 +317,6 @@ local function updateCamera()
 	currentCamera.CFrame = baseCFrame + offset
 end
 
---// CoreGui
 local function disableCoreGui()
 	for _, coreGuiType in Enum.CoreGuiType:GetEnumItems() do
 		if coreGuiType ~= Enum.CoreGuiType.All then
@@ -354,7 +342,6 @@ local function setTopbarVisible(visible: boolean)
 	end
 end
 
---// Spectate
 local function ensureSpectateImage(width: number, height: number): EditableImage
 	local existing = spectateState.image
 	if existing then
@@ -533,7 +520,6 @@ local function pushOwnFrame()
 	})
 end
 
---// Spectate dropdown
 local function destroySpectateDropdownIcons()
 	for _, icon in spectateDropdownIcons do
 		pcall(function()
@@ -620,7 +606,6 @@ local function rebuildSpectateDropdown()
 	ui.spectateIcon:setDropdown(dropdownIcons)
 end
 
---// Machine status
 local function updateStage()
 	local powered = machine:isPowered()
 	ui.offOverlay.Visible = not powered
@@ -673,7 +658,6 @@ local function updateStats()
 	)
 end
 
---// Power
 local function powerOn()
 	if machine:isPowered() then
 		return
@@ -702,7 +686,6 @@ local function reboot()
 	updateStage()
 end
 
---// UI construction
 local function createSkyboxDropdown()
 	local entries = table.clone(Skyboxes)
 	table.sort(entries, function(a, b)
@@ -1060,7 +1043,6 @@ local function showCameraHint()
 	end)
 end
 
---// Input
 local function setupInput()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -1111,7 +1093,6 @@ local function setupInput()
 	end)
 end
 
---// Icon wiring
 local function setupIcons()
 	ui.offOverlay.Activated:Connect(powerOn)
 
@@ -1147,7 +1128,6 @@ local function setupIcons()
 	rebuildSpectateDropdown()
 end
 
---// Entry point
 local function main()
 	ui = buildGui()
 	showCameraHint()

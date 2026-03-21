@@ -5,63 +5,116 @@ local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
-local DESK_TEMPLATE = ServerStorage.DESK_TEMPLATE
-local remote = Instance.new("RemoteFunction")
-remote.Parent = ReplicatedStorage
+local DESK_TEMPLATE = ServerStorage:WaitForChild("DESK_TEMPLATE")
+
+local REMOTE_NAME = "MachinaRemote"
+local DEFAULT_SKYBOX = "Baltic Dune"
+local DEFAULT_SPECTATORS_ALLOWED = true
+local DESK_SPACING = 200
 
 local settingsStore = DataStoreService:GetDataStore("Machina_PlayerSettings_v1")
 
-local DEFAULT_SKYBOX = "Baltic Dune"
-local DEFAULT_SPECTATORS_ALLOWED = true
+local remote = ReplicatedStorage:FindFirstChildOfClass("REMOTE_NAME")
+if remote and not remote:IsA("RemoteFunction") then
+	remote:Destroy()
+	remote = nil
+end
 
-local currentX = 0
+if not remote then
+	remote = Instance.new("RemoteFunction")
+	remote.Name = REMOTE_NAME
+	remote.Parent = ReplicatedStorage
+end
 
-local playerSettings = {} :: {
-	[number]: {
-		spectatorsAllowed: boolean,
-		skyboxName: string,
-	},
+type PlayerSettings = {
+	spectatorsAllowed: boolean,
+	skyboxName: string,
 }
 
-local liveFrames = {} :: {
-	[number]: {
-		width: number,
-		height: number,
-		buffer: buffer,
-		timestamp: number,
-	},
+type LiveFrame = {
+	width: number,
+	height: number,
+	buffer: buffer,
+	timestamp: number,
 }
 
-local viewerToTarget = {} :: { [number]: number }
-local targetToViewers = {} :: { [number]: { [number]: true } }
+local nextDeskX = 0
 
-local function getKey(userId: number): string
+local playerSettings: { [number]: PlayerSettings } = {}
+local liveFrames: { [number]: LiveFrame } = {}
+
+local viewerToTarget: { [number]: number } = {}
+local targetToViewers: { [number]: { [number]: true } } = {}
+
+local function getSettingsKey(userId: number): string
 	return ("player_%d"):format(userId)
 end
 
-local function getDesk(player: Player): Model?
-	return workspace:FindFirstChild(("%s_DESK"):format(player.Name))
+local function getDeskName(playerName: string): string
+	return ("%s_DESK"):format(playerName)
+end
+
+local function getDeskByPlayer(player: Player): Model?
+	local desk = workspace:FindFirstChild(getDeskName(player.Name))
+	if desk and desk:IsA("Model") then
+		return desk
+	end
+
+	return nil
+end
+
+local function getDeskCameraCFrame(player: Player): CFrame?
+	local desk = getDeskByPlayer(player)
+	if not desk then
+		return nil
+	end
+
+	local cameraPart = desk:FindFirstChild("CAM")
+	if cameraPart and cameraPart:IsA("BasePart") then
+		return cameraPart.CFrame
+	end
+
+	return nil
+end
+
+local function getOrCreateSettings(userId: number): PlayerSettings
+	local settings = playerSettings[userId]
+	if settings then
+		return settings
+	end
+
+	settings = {
+		spectatorsAllowed = DEFAULT_SPECTATORS_ALLOWED,
+		skyboxName = DEFAULT_SKYBOX,
+	}
+	playerSettings[userId] = settings
+
+	return settings
 end
 
 local function loadSettings(player: Player)
-	local data
+	local loadedData = nil
 
 	local ok, err = pcall(function()
-		data = settingsStore:GetAsync(getKey(player.UserId))
+		loadedData = settingsStore:GetAsync(getSettingsKey(player.UserId))
 	end)
 
 	if not ok then
-		warn("Failed to load settings for", player.Name, err)
+		warn(("Failed to load settings for %s: %s"):format(player.Name, tostring(err)))
 	end
 
-	data = type(data) == "table" and data or {}
+	local settings = getOrCreateSettings(player.UserId)
+	if type(loadedData) ~= "table" then
+		return
+	end
 
-	playerSettings[player.UserId] = {
-		spectatorsAllowed = if data.spectatorsAllowed == nil
-			then DEFAULT_SPECTATORS_ALLOWED
-			else data.spectatorsAllowed,
-		skyboxName = data.skyboxName or DEFAULT_SKYBOX,
-	}
+	if type(loadedData.spectatorsAllowed) == "boolean" then
+		settings.spectatorsAllowed = loadedData.spectatorsAllowed
+	end
+
+	if type(loadedData.skyboxName) == "string" and loadedData.skyboxName ~= "" then
+		settings.skyboxName = loadedData.skyboxName
+	end
 end
 
 local function saveSettings(player: Player)
@@ -71,7 +124,7 @@ local function saveSettings(player: Player)
 	end
 
 	local ok, err = pcall(function()
-		settingsStore:UpdateAsync(getKey(player.UserId), function()
+		settingsStore:UpdateAsync(getSettingsKey(player.UserId), function()
 			return {
 				spectatorsAllowed = settings.spectatorsAllowed,
 				skyboxName = settings.skyboxName,
@@ -80,18 +133,21 @@ local function saveSettings(player: Player)
 	end)
 
 	if not ok then
-		warn("Failed to save settings for", player.Name, err)
+		warn(("Failed to save settings for %s: %s"):format(player.Name, tostring(err)))
 	end
 end
 
 local function applyDeskAttributes(player: Player)
-	local desk = getDesk(player)
-	local settings = playerSettings[player.UserId]
-	if not desk or not settings then
+	local desk = getDeskByPlayer(player)
+	if not desk then
 		return
 	end
 
+	local settings = getOrCreateSettings(player.UserId)
+
 	desk:SetAttribute("OwnerUserId", player.UserId)
+	desk:SetAttribute("OwnerName", player.Name)
+	desk:SetAttribute("OwnerDisplayName", player.DisplayName)
 	desk:SetAttribute("SpectatorsAllowed", settings.spectatorsAllowed)
 	desk:SetAttribute("SkyboxName", settings.skyboxName)
 end
@@ -105,65 +161,97 @@ local function removeViewer(viewerUserId: number)
 	viewerToTarget[viewerUserId] = nil
 
 	local viewers = targetToViewers[targetUserId]
-	if viewers then
-		viewers[viewerUserId] = nil
-		if next(viewers) == nil then
-			targetToViewers[targetUserId] = nil
-		end
+	if not viewers then
+		return
+	end
+
+	viewers[viewerUserId] = nil
+
+	if next(viewers) == nil then
+		targetToViewers[targetUserId] = nil
 	end
 end
 
-local function onPlayerAdded(player: Player)
-	loadSettings(player)
+local function clearTargetViewers(targetUserId: number)
+	local viewers = targetToViewers[targetUserId]
+	if not viewers then
+		return
+	end
 
+	for viewerUserId in viewers do
+		viewerToTarget[viewerUserId] = nil
+	end
+
+	targetToViewers[targetUserId] = nil
+end
+
+local function seatDeskRig(desk: Model, player: Player)
+	local rig = desk:FindFirstChild("Rig")
+	local seat = desk:FindFirstChild("Seat")
+
+	if not rig or not rig:IsA("Model") or not seat or not seat:IsA("Seat") then
+		return
+	end
+
+	local humanoid = rig:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+
+	local ok, description = pcall(function()
+		return Players:GetHumanoidDescriptionFromUserIdAsync(player.UserId)
+	end)
+
+	if ok and description then
+		pcall(function()
+			humanoid:ApplyDescriptionAsync(description)
+		end)
+	else
+		warn(("Failed to get description for %s"):format(player.Name))
+	end
+
+	seat:Sit(humanoid)
+end
+
+local function spawnDeskForPlayer(player: Player)
 	local desk = DESK_TEMPLATE:Clone()
+	desk.Name = getDeskName(player.Name)
 	desk.Parent = workspace
-	desk:PivotTo(CFrame.new(currentX, 0, 0))
-	desk.Name = `{player.Name}_DESK`
+	desk:PivotTo(CFrame.new(nextDeskX, 0, 0))
 
-	local humanoid = desk.Rig.Humanoid
-	local description = Players:GetHumanoidDescriptionFromUserIdAsync(player.UserId)
-	humanoid:ApplyDescriptionAsync(description)
-	desk.Seat:Sit(humanoid)
-
+	seatDeskRig(desk, player)
 	applyDeskAttributes(player)
 
-	currentX += 200
+	nextDeskX += DESK_SPACING
 end
 
-local function onPlayerRemoving(player: Player)
-	removeViewer(player.UserId)
-	targetToViewers[player.UserId] = nil
-	liveFrames[player.UserId] = nil
-
-	saveSettings(player)
-	playerSettings[player.UserId] = nil
-
-	local desk: Model? = workspace:FindFirstChild(`{player.Name}_DESK`)
-	if desk then
-		currentX = desk:GetPivot().X
-		desk:Destroy()
+local function destroyDeskForPlayer(player: Player)
+	local desk = getDeskByPlayer(player)
+	if not desk then
+		return
 	end
+
+	desk:Destroy()
 end
 
 local function getMenuData(requestingPlayer: Player)
-	local selfSettings = playerSettings[requestingPlayer.UserId]
+	local selfSettings = getOrCreateSettings(requestingPlayer.UserId)
+	local entries = {}
 
-	local playerEntries = {}
+	for _, otherPlayer in Players:GetPlayers() do
+		if otherPlayer ~= requestingPlayer then
+			local otherSettings = getOrCreateSettings(otherPlayer.UserId)
 
-	for _, other in Players:GetPlayers() do
-		if other ~= requestingPlayer then
-			local settings = playerSettings[other.UserId]
-			table.insert(playerEntries, {
-				userId = other.UserId,
-				name = other.Name,
-				displayName = other.DisplayName,
-				spectatorsAllowed = settings and settings.spectatorsAllowed or DEFAULT_SPECTATORS_ALLOWED,
+			table.insert(entries, {
+				userId = otherPlayer.UserId,
+				name = otherPlayer.Name,
+				displayName = otherPlayer.DisplayName,
+				spectatorsAllowed = otherSettings.spectatorsAllowed,
 			})
 		end
 	end
 
-	table.sort(playerEntries, function(a, b)
+	table.sort(entries, function(a, b)
 		return string.lower(a.displayName) < string.lower(b.displayName)
 	end)
 
@@ -172,35 +260,142 @@ local function getMenuData(requestingPlayer: Player)
 			spectatorsAllowed = selfSettings.spectatorsAllowed,
 			skyboxName = selfSettings.skyboxName,
 		},
-		players = playerEntries,
+		players = entries,
 		currentTargetUserId = viewerToTarget[requestingPlayer.UserId],
 	}
 end
 
-remote.OnServerInvoke = function(player: Player, action: string, payload)
+local function serializeFrame(frame: LiveFrame?)
+	if not frame then
+		return nil
+	end
+
+	return {
+		width = frame.width,
+		height = frame.height,
+		buffer = frame.buffer,
+	}
+end
+
+local function handleStartSpectate(player: Player, payload: any)
+	local targetUserId = tonumber(payload)
+	if not targetUserId then
+		return {
+			ok = false,
+			message = "Invalid target.",
+		}
+	end
+
+	local target = Players:GetPlayerByUserId(targetUserId)
+	if not target or target == player then
+		return {
+			ok = false,
+			message = "Invalid target.",
+		}
+	end
+
+	local targetSettings = playerSettings[targetUserId]
+	if not targetSettings or not targetSettings.spectatorsAllowed then
+		return {
+			ok = false,
+			message = "Not allowed to spectate.",
+		}
+	end
+
+	removeViewer(player.UserId)
+
+	viewerToTarget[player.UserId] = targetUserId
+	targetToViewers[targetUserId] = targetToViewers[targetUserId] or {}
+	targetToViewers[targetUserId][player.UserId] = true
+
+	return {
+		ok = true,
+		targetUserId = targetUserId,
+		targetName = target.Name,
+		targetDisplayName = target.DisplayName,
+		cameraCFrame = getDeskCameraCFrame(target),
+		skyboxName = targetSettings.skyboxName,
+		frame = serializeFrame(liveFrames[targetUserId]),
+	}
+end
+
+local function handleGetSpectateFrame(player: Player)
+	local targetUserId = viewerToTarget[player.UserId]
+	if not targetUserId then
+		return {
+			ok = false,
+			message = "Not spectating.",
+		}
+	end
+
+	local target = Players:GetPlayerByUserId(targetUserId)
+	if not target then
+		removeViewer(player.UserId)
+		return {
+			ok = false,
+			message = "Target left.",
+		}
+	end
+
+	local targetSettings = playerSettings[targetUserId]
+	if not targetSettings or not targetSettings.spectatorsAllowed then
+		removeViewer(player.UserId)
+		return {
+			ok = false,
+			message = "Not allowed to spectate.",
+		}
+	end
+
+	return {
+		ok = true,
+		targetUserId = targetUserId,
+		cameraCFrame = getDeskCameraCFrame(target),
+		skyboxName = targetSettings.skyboxName,
+		frame = serializeFrame(liveFrames[targetUserId]),
+	}
+end
+
+local function handlePushFrame(player: Player, payload: any)
+	if type(payload) ~= "table" then
+		return false
+	end
+
+	local width = payload.width
+	local height = payload.height
+	local frameBuffer = payload.buffer
+
+	if type(width) ~= "number" or type(height) ~= "number" or typeof(frameBuffer) ~= "buffer" then
+		return false
+	end
+
+	liveFrames[player.UserId] = {
+		width = width,
+		height = height,
+		buffer = frameBuffer,
+		timestamp = os.clock(),
+	}
+
+	return true
+end
+
+remote.OnServerInvoke = function(player: Player, action: string, payload: any)
 	if action == "GetMenuData" then
 		return getMenuData(player)
 	end
 
 	if action == "SetSpectatorsAllowed" then
-		local allowed = payload == true
+		local settings = getOrCreateSettings(player.UserId)
+		settings.spectatorsAllowed = payload == true
 
-		playerSettings[player.UserId].spectatorsAllowed = allowed
 		applyDeskAttributes(player)
 
-		if not allowed then
-			local viewers = targetToViewers[player.UserId]
-			if viewers then
-				for viewerUserId in viewers do
-					viewerToTarget[viewerUserId] = nil
-				end
-				targetToViewers[player.UserId] = nil
-			end
+		if not settings.spectatorsAllowed then
+			clearTargetViewers(player.UserId)
 		end
 
 		return {
 			ok = true,
-			spectatorsAllowed = allowed,
+			spectatorsAllowed = settings.spectatorsAllowed,
 		}
 	end
 
@@ -212,62 +407,18 @@ remote.OnServerInvoke = function(player: Player, action: string, payload)
 			}
 		end
 
-		playerSettings[player.UserId].skyboxName = payload
+		local settings = getOrCreateSettings(player.UserId)
+		settings.skyboxName = payload
 		applyDeskAttributes(player)
 
 		return {
 			ok = true,
-			skyboxName = payload,
+			skyboxName = settings.skyboxName,
 		}
 	end
 
 	if action == "StartSpectate" then
-		local targetUserId = tonumber(payload)
-		if not targetUserId then
-			return {
-				ok = false,
-				message = "Invalid target.",
-			}
-		end
-
-		local target = Players:GetPlayerByUserId(targetUserId)
-		if not target or target == player then
-			return {
-				ok = false,
-				message = "Invalid target.",
-			}
-		end
-
-		local settings = playerSettings[targetUserId]
-		if not settings or not settings.spectatorsAllowed then
-			return {
-				ok = false,
-				message = "Not allowed to spectate.",
-			}
-		end
-
-		removeViewer(player.UserId)
-
-		viewerToTarget[player.UserId] = targetUserId
-		targetToViewers[targetUserId] = targetToViewers[targetUserId] or {}
-		targetToViewers[targetUserId][player.UserId] = true
-
-		local frame = liveFrames[targetUserId]
-		local targetDesk = getDesk(target)
-
-		return {
-			ok = true,
-			targetUserId = targetUserId,
-			targetName = target.Name,
-			targetDisplayName = target.DisplayName,
-			cameraCFrame = targetDesk and targetDesk:WaitForChild("CAM").CFrame or nil,
-			skyboxName = settings.skyboxName,
-			frame = frame and {
-				width = frame.width,
-				height = frame.height,
-				buffer = frame.buffer,
-			} or nil,
-		}
+		return handleStartSpectate(player, payload)
 	end
 
 	if action == "StopSpectate" then
@@ -276,75 +427,33 @@ remote.OnServerInvoke = function(player: Player, action: string, payload)
 	end
 
 	if action == "PushFrame" then
-		if type(payload) ~= "table" then
-			return false
-		end
-
-		local width = payload.width
-		local height = payload.height
-		local frameBuffer = payload.buffer
-
-		if type(width) ~= "number" or type(height) ~= "number" or typeof(frameBuffer) ~= "buffer" then
-			return false
-		end
-
-		liveFrames[player.UserId] = {
-			width = width,
-			height = height,
-			buffer = frameBuffer,
-			timestamp = os.clock(),
-		}
-
-		return true
+		return handlePushFrame(player, payload)
 	end
 
 	if action == "GetSpectateFrame" then
-		local targetUserId = viewerToTarget[player.UserId]
-		if not targetUserId then
-			return {
-				ok = false,
-				message = "Not spectating.",
-			}
-		end
-
-		local target = Players:GetPlayerByUserId(targetUserId)
-		if not target then
-			removeViewer(player.UserId)
-			return {
-				ok = false,
-				message = "Target left.",
-			}
-		end
-
-		local settings = playerSettings[targetUserId]
-		if not settings or not settings.spectatorsAllowed then
-			removeViewer(player.UserId)
-			return {
-				ok = false,
-				message = "Not allowed to spectate.",
-			}
-		end
-
-		local frame = liveFrames[targetUserId]
-		local targetDesk = getDesk(target)
-
-		return {
-			ok = true,
-			targetUserId = targetUserId,
-			cameraCFrame = targetDesk and targetDesk:WaitForChild("CAM").CFrame or nil,
-			skyboxName = settings.skyboxName,
-			frame = frame and {
-				width = frame.width,
-				height = frame.height,
-				buffer = frame.buffer,
-			} or nil,
-		}
+		return handleGetSpectateFrame(player)
 	end
 
 	return {
 		ok = false,
 		message = ("Unknown action: %s"):format(tostring(action)),
 	}
+end
+
+local function onPlayerAdded(player: Player)
+	loadSettings(player)
+	spawnDeskForPlayer(player)
+end
+
+local function onPlayerRemoving(player: Player)
+	removeViewer(player.UserId)
+	clearTargetViewers(player.UserId)
+
+	liveFrames[player.UserId] = nil
+	saveSettings(player)
+	playerSettings[player.UserId] = nil
+
+	destroyDeskForPlayer(player)
 end
 
 for _, player in Players:GetPlayers() do
