@@ -230,7 +230,7 @@ local function destroyDeskForPlayer(player: Player)
 	if not desk then
 		return
 	end
-
+	nextDeskX = desk:GetPivot().X
 	desk:Destroy()
 end
 
