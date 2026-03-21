@@ -1,31 +1,41 @@
---This is only for local repository and should be created by users
+-- This is only for local repository and should be created by users
+
+--// Services
+local AssetService = game:GetService("AssetService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
-local AssetService = game:GetService("AssetService")
 
+--// Player / Workspace
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local currentCamera = workspace.CurrentCamera
 
-local Icon = require(script.Parent.TopbarPlus)
-local Skyboxes = require(script.Parent.Skyboxes)
-
-local deskInstance = workspace:WaitForChild(`{player.Name}_DESK`)
+local deskInstance = workspace:WaitForChild(("%s_DESK"):format(player.Name))
 local cameraPart: Part = deskInstance:WaitForChild("CAM")
 local screen: Part = deskInstance:WaitForChild("SCREEN")
+
+--// Modules
+local Icon = require(script.Parent.Parent.Packages.TopbarPlus)
+local Skyboxes = require(script.Parent.Skyboxes)
+local remote = script.Parent.Parent:FindFirstChildOfClass("RemoteFunction")
 
 local Config = require(script.Parent.Parent.Config)
 local PcSystem = require(script.Parent.Parent.platforms.x86.PcSystem)
 
+--// Constants
 local DEFAULT_SKYBOX = "Baltic Dune"
-
 local AUTO_POWER = true
 
 local TOPBAR_TOGGLE_KEY = Enum.KeyCode.F5
 local STATS_TOGGLE_KEY = Enum.KeyCode.F6
+
+local FRAME_PUSH_RATE = 0.35
+local FRAME_PULL_RATE = 0.35
+local STATS_RATE = 0.5
+local STAGE_RATE = 0.15
 
 local SCROLL_STEP = 6
 local CAMERA_DRAG_SENS = 0.01
@@ -34,18 +44,6 @@ local CAMERA_FOV_MIN = 5
 local CAMERA_FOV_MAX = 85
 local CAMERA_BOUNDS_X = 1.4
 local CAMERA_BOUNDS_Y = 0.9
-
-local STATS_RATE = 0.5
-local STAGE_RATE = 0.15
-
-local THEME = {
-	Text = Color3.fromRGB(238, 241, 245),
-	MutedText = Color3.fromRGB(138, 147, 160),
-	Success = Color3.fromRGB(99, 208, 141),
-	Warning = Color3.fromRGB(255, 191, 92),
-	Danger = Color3.fromRGB(255, 110, 110),
-	ScreenBackground = Color3.fromRGB(0, 0, 0),
-}
 
 local SKY_PROPS = {
 	"SkyboxBk",
@@ -56,13 +54,135 @@ local SKY_PROPS = {
 	"SkyboxUp",
 }
 
+local THEME = {
+	Text = Color3.fromRGB(238, 241, 245),
+	MutedText = Color3.fromRGB(138, 147, 160),
+	Success = Color3.fromRGB(99, 208, 141),
+	Warning = Color3.fromRGB(255, 191, 92),
+	Danger = Color3.fromRGB(255, 110, 110),
+	ScreenBackground = Color3.fromRGB(0, 0, 0),
+}
+
+local STAGE_COLORS = {
+	RUNNING = THEME.Success,
+	FAULT = THEME.Danger,
+}
+
+--// State
+local machine
+local ui
+
+local icons = {}
+local topbarVisible = true
+
+local baseCFrame: CFrame
+local cameraOffset = Vector2.zero
+local isPanning = false
+local lastMousePos = Vector2.zero
+
+local lastPush = 0
+local lastPull = 0
+
+local spectateState = {
+	targetUserId = nil :: number?,
+	targetName = nil :: string?,
+	image = nil :: EditableImage?,
+	active = false,
+}
+
+local spectateDropdownIcons = {}
+
+local function destroySpectateDropdownIcons()
+	for _, icon in spectateDropdownIcons do
+		pcall(function()
+			icon:destroy()
+		end)
+	end
+
+	table.clear(spectateDropdownIcons)
+end
+
+local function trackSpectateDropdownIcon(icon)
+	table.insert(spectateDropdownIcons, icon)
+	return icon
+end
+
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
+local function create(className: string, props: { [string]: any }, parent: Instance?): Instance
+	local instance = Instance.new(className)
+
+	for key, value in props do
+		instance[key] = value
+	end
+
+	if parent then
+		instance.Parent = parent
+	end
+
+	return instance
+end
+
+local function registerIcon(icon)
+	table.insert(icons, icon)
+	return icon
+end
+
+local function getHeadshot(userId: number): string
+	return ("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150"):format(userId)
+end
+
+local function clampCameraOffset(offset: Vector2): Vector2
+	return Vector2.new(
+		math.clamp(offset.X, -CAMERA_BOUNDS_X, CAMERA_BOUNDS_X),
+		math.clamp(offset.Y, -CAMERA_BOUNDS_Y, CAMERA_BOUNDS_Y)
+	)
+end
+
+local function showMessage(title: string, text: string, color: Color3?, duration: number?)
+	if not ui or not ui.messageFrame then
+		return
+	end
+
+	duration = duration or 2.5
+
+	ui.messageTitle.Text = title
+	ui.messageBody.Text = text
+	ui.messageTitle.TextColor3 = color or THEME.Text
+	ui.messageFrame.Visible = true
+
+	local token = os.clock()
+	ui._messageToken = token
+
+	task.delay(duration, function()
+		if not ui or ui._messageToken ~= token then
+			return
+		end
+
+		ui.messageFrame.Visible = false
+	end)
+end
+
+local function attemptRepeatedly(callback: () -> ())
+	for _ = 1, 6 do
+		if pcall(callback) then
+			return
+		end
+		task.wait(0.2)
+	end
+end
+
+--// Skybox
 local function getSkyboxByName(name: string)
-	for _, sky in ipairs(Skyboxes) do
-		if sky.Name == name then
-			return sky
+	for _, skyData in ipairs(Skyboxes) do
+		if skyData.Name == name then
+			return skyData
 		end
 	end
-	return false
+
+	return nil
 end
 
 local function createSkyFromData(name: string, data: { [string]: any }): Sky
@@ -72,51 +192,39 @@ local function createSkyFromData(name: string, data: { [string]: any }): Sky
 	for _, prop in SKY_PROPS do
 		local value = data[prop]
 		if value ~= nil then
-			sky[prop] = value
+			(sky :: any)[prop] = value
 		end
 	end
 
 	return sky
 end
 
-local machine
-local ui
-local icons = {}
-local topbarVisible = true
-
-local baseCFrame: CFrame
-local cameraOffset = Vector2.zero
-local isPanning = false
-local lastMousePos = Vector2.zero
-
-local function create(className: string, props: { [string]: any }, parent: Instance): Instance
-	local inst = Instance.new(className)
-	for k, v in props do
-		inst[k] = v
+local function applySkybox(skyData)
+	for _, child in Lighting:GetChildren() do
+		if child:IsA("Sky") then
+			child:Destroy()
+		end
 	end
-	inst.Parent = parent
-	return inst
+
+	local sky = createSkyFromData(skyData.Name, skyData)
+	sky.Parent = Lighting
 end
 
-local function clampOffset(v: Vector2): Vector2
-	return Vector2.new(
-		math.clamp(v.X, -CAMERA_BOUNDS_X, CAMERA_BOUNDS_X),
-		math.clamp(v.Y, -CAMERA_BOUNDS_Y, CAMERA_BOUNDS_Y)
-	)
+local function applySkyboxByName(name: string)
+	local skyData = getSkyboxByName(name)
+	if skyData then
+		applySkybox(skyData)
+	end
 end
 
-local function registerIcon(icon)
-	icons[#icons + 1] = icon
-	return icon
-end
-
+--// Camera
 local function resetCamera()
 	cameraOffset = Vector2.zero
 	currentCamera.FieldOfView = CAMERA_FOV_DEFAULT
 end
 
 local function applyPanDelta(delta: Vector2)
-	cameraOffset = clampOffset(
+	cameraOffset = clampCameraOffset(
 		Vector2.new(cameraOffset.X - delta.X * CAMERA_DRAG_SENS, cameraOffset.Y + delta.Y * CAMERA_DRAG_SENS)
 	)
 end
@@ -126,49 +234,309 @@ local function updateCamera()
 	currentCamera.CFrame = baseCFrame + offset
 end
 
+--// CoreGui
 local function disableCoreGui()
-	local function attempt(fn)
-		for _ = 1, 6 do
-			if pcall(fn) then
-				return
-			end
-			task.wait(0.2)
-		end
-	end
-
-	for _, t in Enum.CoreGuiType:GetEnumItems() do
-		if t ~= Enum.CoreGuiType.All then
-			attempt(function()
-				StarterGui:SetCoreGuiEnabled(t, false)
+	for _, coreGuiType in Enum.CoreGuiType:GetEnumItems() do
+		if coreGuiType ~= Enum.CoreGuiType.All then
+			attemptRepeatedly(function()
+				StarterGui:SetCoreGuiEnabled(coreGuiType, false)
 			end)
 		end
 	end
 
-	attempt(function()
+	attemptRepeatedly(function()
 		StarterGui:SetCore("TopbarEnabled", false)
 	end)
 end
 
-local function applySkybox(skyData)
-	for _, child in Lighting:GetChildren() do
-		if child:IsA("Sky") then
-			child:Destroy()
-		end
-	end
-	local sky = createSkyFromData(skyData.Name, skyData)
-	sky.Parent = Lighting
-end
-
 local function setTopbarVisible(visible: boolean)
 	topbarVisible = visible
+
 	for _, icon in icons do
 		icon:setEnabled(visible)
+
 		if not visible then
 			icon:deselect()
 		end
 	end
 end
 
+--// Spectate
+local function ensureSpectateImage(width: number, height: number): EditableImage
+	local existing = spectateState.image
+	if existing then
+		local size = existing.Size
+		if size.X == width and size.Y == height then
+			return existing
+		end
+	end
+
+	local newImage = AssetService:CreateEditableImage({
+		Size = Vector2.new(width, height),
+	})
+
+	spectateState.image = newImage
+	return newImage
+end
+
+local function applySpectateFrame(result)
+	if not result or not result.frame then
+		return
+	end
+
+	local frame = result.frame
+	local image = ensureSpectateImage(frame.width, frame.height)
+
+	image:WritePixelsBuffer(Vector2.zero, Vector2.new(frame.width, frame.height), frame.buffer)
+	ui.imageLabel.ImageContent = Content.fromObject(image)
+
+	if result.cameraCFrame then
+		baseCFrame = result.cameraCFrame
+	end
+
+	if result.skyboxName then
+		applySkyboxByName(result.skyboxName)
+	end
+end
+
+local function stopSpectating()
+	spectateState.targetUserId = nil
+	spectateState.targetName = nil
+	spectateState.active = false
+
+	remote:InvokeServer("StopSpectate")
+
+	if spectateState.image then
+		ui.imageLabel.ImageContent = Content.fromObject(machine.display)
+	end
+
+	baseCFrame = cameraPart.CFrame
+	showMessage("Spectate", "Stopped spectating current player.", THEME.MutedText)
+end
+
+local function startSpectating(targetUserId: number)
+	local result = remote:InvokeServer("StartSpectate", targetUserId)
+	if not result or not result.ok then
+		showMessage(result and result.message or "Could not spectate.", THEME.Danger)
+		return
+	end
+
+	spectateState.targetUserId = result.targetUserId
+	spectateState.targetName = result.targetName
+	spectateState.active = true
+
+	if result.cameraCFrame then
+		baseCFrame = result.cameraCFrame
+	end
+
+	if result.skyboxName then
+		applySkyboxByName(result.skyboxName)
+	end
+
+	applySpectateFrame(result)
+	showMessage(
+		"Spectating",
+		("Now spectating %s."):format(result.targetDisplayName or result.targetName),
+		THEME.Success
+	)
+end
+
+local function pullSpectateFrame()
+	if not spectateState.active then
+		return
+	end
+
+	local result = remote:InvokeServer("GetSpectateFrame")
+	if not result or not result.ok then
+		showMessage("Spectate Ended", result and result.message or "Spectate ended.", THEME.Warning)
+		stopSpectating()
+		return
+	end
+
+	applySpectateFrame(result)
+end
+
+local function pushOwnFrame()
+	if spectateState.active then
+		return
+	end
+
+	if not machine:isPowered() then
+		return
+	end
+
+	local display = machine.display
+	if not display then
+		return
+	end
+
+	local size = display.Size
+	local pixels = display:ReadPixelsBuffer(Vector2.zero, size)
+
+	remote:InvokeServer("PushFrame", {
+		width = size.X,
+		height = size.Y,
+		buffer = pixels,
+	})
+end
+
+local function rebuildSpectateDropdown()
+	local result = remote:InvokeServer("GetMenuData")
+	if not result or not ui or not ui.spectateIcon then
+		return
+	end
+
+	destroySpectateDropdownIcons()
+
+	local dropdownIcons = {}
+	local allowed = result.self.spectatorsAllowed
+
+	local toggleIcon = trackSpectateDropdownIcon(
+		Icon.new()
+			:setLabel(("Spectators Allowed: %s"):format(allowed and "True" or "False"))
+			:oneClick(true)
+			:autoDeselect(true)
+	)
+
+	toggleIcon.selected:Connect(function()
+		local response = remote:InvokeServer("SetSpectatorsAllowed", not allowed)
+		if response and response.ok then
+			showMessage(
+				"Spectate Settings",
+				("Spectators allowed: %s"):format(response.spectatorsAllowed and "True" or "False"),
+				response.spectatorsAllowed and THEME.Success or THEME.Warning
+			)
+			rebuildSpectateDropdown()
+		end
+	end)
+
+	table.insert(dropdownIcons, toggleIcon)
+
+	local stopIcon = trackSpectateDropdownIcon(
+		Icon.new():setLabel("Stop Spectating"):oneClick(true):autoDeselect(true)
+	)
+
+	stopIcon.selected:Connect(function()
+		stopSpectating()
+		showMessage("Spectate", "Stopped spectating current player.", THEME.MutedText)
+		rebuildSpectateDropdown()
+	end)
+
+	table.insert(dropdownIcons, stopIcon)
+
+	for _, entry in ipairs(result.players) do
+		local suffix = entry.spectatorsAllowed and "" or " [NOT ALLOWED]"
+
+		local playerIcon = trackSpectateDropdownIcon(
+			Icon.new()
+				:setLabel(("%s (@%s)%s"):format(entry.displayName, entry.name, suffix))
+				:setImage(getHeadshot(entry.userId))
+				:oneClick(true)
+				:autoDeselect(true)
+		)
+
+		playerIcon.selected:Connect(function()
+			if not entry.spectatorsAllowed then
+				showMessage(
+					"Spectate Blocked",
+					("%s does not allow spectators."):format(entry.displayName),
+					THEME.Danger
+				)
+				return
+			end
+
+			startSpectating(entry.userId)
+			showMessage("Spectating", ("Now spectating %s."):format(entry.displayName), THEME.Success)
+			rebuildSpectateDropdown()
+		end)
+
+		table.insert(dropdownIcons, playerIcon)
+	end
+
+	ui.spectateIcon:setDropdown(dropdownIcons)
+end
+
+local function updateStage()
+	local powered = machine:isPowered()
+	ui.offOverlay.Visible = not powered
+
+	local stage = powered and machine:getBootStage() or "OFFLINE"
+	local color = STAGE_COLORS[stage] or (powered and THEME.Warning or THEME.Danger)
+
+	ui.statusIcon:setLabel("● " .. stage)
+	ui.statusIcon:setTextColor(color)
+end
+
+local function updateStats()
+	if not ui.statsPanel.Visible then
+		return
+	end
+
+	if not machine:isPowered() then
+		ui.statsLabel.Text = "POWERED OFF"
+		return
+	end
+
+	local stats = machine:getStats()
+	local cpu = stats.cpuStats or {}
+	local ram = stats.ramStats or {}
+	local hdd = stats.hddStats or {}
+	local bus = stats.busStats or {}
+	local gpu = stats.gpuStats or {}
+
+	ui.statsLabel.Text = string.format(
+		"Machina  [%s stats]\n\n"
+			.. "Stage      %s\n"
+			.. "Uptime     %.1fs\n"
+			.. "CPU cycles %d\n"
+			.. "CPU instrs %d\n"
+			.. "RAM r/w    %d / %d\n"
+			.. "HDD r/w    %d / %d\n"
+			.. "Bus IRQs   %d\n"
+			.. "GPU flush  %d",
+		STATS_TOGGLE_KEY.Name,
+		tostring(stats.bootStage),
+		stats.uptime or 0,
+		cpu.cycles or 0,
+		cpu.instructions or 0,
+		ram.reads or 0,
+		ram.writes or 0,
+		hdd.reads or 0,
+		hdd.writes or 0,
+		bus.irqFired or 0,
+		gpu.flushes or 0
+	)
+end
+
+local function powerOn()
+	if machine:isPowered() then
+		return
+	end
+
+	machine:powerOn()
+	machine:bindInput(UserInputService)
+	updateStage()
+end
+
+local function shutdown()
+	if not machine:isPowered() then
+		return
+	end
+
+	machine:shutdown()
+	updateStage()
+end
+
+local function reboot()
+	if not machine:isPowered() then
+		return
+	end
+
+	machine:reboot()
+	updateStage()
+end
+
+--// UI
 local function createSkyboxDropdown()
 	local entries = table.clone(Skyboxes)
 
@@ -177,12 +545,17 @@ local function createSkyboxDropdown()
 	end)
 
 	local skyIcons = {}
+
 	for _, skyData in entries do
-		local icon = Icon.new():setLabel(skyData.Name):oneClick(true):autoDeselect(true)
-		icon.selected:Connect(function()
+		local skyIcon = Icon.new():setLabel(skyData.Name):oneClick(true):autoDeselect(true)
+
+		skyIcon.selected:Connect(function()
 			applySkybox(skyData)
+			remote:InvokeServer("SetSkybox", skyData.Name)
+			showMessage("Skybox", ("Skybox set to %s."):format(skyData.Name), THEME.Success)
 		end)
-		skyIcons[#skyIcons + 1] = icon
+
+		table.insert(skyIcons, skyIcon)
 	end
 
 	return registerIcon(
@@ -191,8 +564,21 @@ local function createSkyboxDropdown()
 			:align("Left")
 			:autoDeselect(true)
 			:modifyTheme({ "Dropdown", "MaxIcons", 6 })
-			:modifyChildTheme({ "Widget", "MinimumWidth", 140 })
+			:modifyChildTheme({ "Widget", "MinimumWidth", 170 })
 			:setDropdown(skyIcons)
+	)
+end
+
+local function createSpectateIcon()
+	return registerIcon(
+		Icon.new()
+			:setLabel("Spectate")
+			:setImage(7035631382)
+			:setImageScale(0.6)
+			:align("Left")
+			:autoDeselect(true)
+			:modifyTheme({ "Dropdown", "MaxIcons", 8 })
+			:modifyChildTheme({ "Widget", "MinimumWidth", 220 })
 	)
 end
 
@@ -259,7 +645,7 @@ local function buildGui()
 		Size = UDim2.fromOffset(420, 28),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.Gotham,
-		Text = `{STATS_TOGGLE_KEY.Name} stats  |  {TOPBAR_TOGGLE_KEY.Name} topbar`,
+		Text = ("%s stats  |  %s topbar"):format(STATS_TOGGLE_KEY.Name, TOPBAR_TOGGLE_KEY.Name),
 		TextColor3 = THEME.MutedText,
 		TextSize = 8,
 		TextWrapped = true,
@@ -306,8 +692,8 @@ local function buildGui()
 
 	local cameraHint = create("Frame", {
 		Name = "CameraHint",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 16),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0.98, 0),
 		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundColor3 = Color3.fromRGB(20, 24, 32),
 		BackgroundTransparency = 0.05,
@@ -339,7 +725,9 @@ local function buildGui()
 		BackgroundTransparency = 0.2,
 		BorderSizePixel = 0,
 	}, cameraHint)
+
 	create("UICorner", { CornerRadius = UDim.new(1, 0) }, hintIcon)
+
 	create("TextLabel", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -353,10 +741,12 @@ local function buildGui()
 		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundTransparency = 1,
 	}, cameraHint)
+
 	create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Vertical,
 		Padding = UDim.new(0, 2),
 	}, textContainer)
+
 	create("TextLabel", {
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.XY,
@@ -366,6 +756,7 @@ local function buildGui()
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, textContainer)
+
 	create("TextLabel", {
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.XY,
@@ -376,9 +767,95 @@ local function buildGui()
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, textContainer)
 
+	local messageFrame = create("Frame", {
+		Name = "MessageFrame",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0.98, 0),
+		AutomaticSize = Enum.AutomaticSize.XY,
+		BackgroundColor3 = Color3.fromRGB(20, 24, 32),
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+		Visible = false,
+		ZIndex = 30,
+	}, gui)
+
+	create("UICorner", { CornerRadius = UDim.new(0, 14) }, messageFrame)
+	create("UIStroke", {
+		Color = Color3.fromRGB(60, 70, 90),
+		Transparency = 0.2,
+		Thickness = 1,
+	}, messageFrame)
+	create("UIPadding", {
+		PaddingTop = UDim.new(0, 10),
+		PaddingBottom = UDim.new(0, 10),
+		PaddingLeft = UDim.new(0, 14),
+		PaddingRight = UDim.new(0, 14),
+	}, messageFrame)
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 10),
+	}, messageFrame)
+
+	local messageIcon = create("Frame", {
+		Name = "Icon",
+		Size = UDim2.fromOffset(28, 28),
+		BackgroundColor3 = Color3.fromRGB(40, 55, 90),
+		BackgroundTransparency = 0.2,
+		BorderSizePixel = 0,
+	}, messageFrame)
+
+	create("UICorner", { CornerRadius = UDim.new(1, 0) }, messageIcon)
+
+	create("TextLabel", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamBold,
+		Text = "i",
+		TextColor3 = Color3.fromRGB(150, 180, 255),
+		TextSize = 16,
+		ZIndex = 31,
+	}, messageIcon)
+
+	local messageTextContainer = create("Frame", {
+		Name = "TextContainer",
+		AutomaticSize = Enum.AutomaticSize.XY,
+		BackgroundTransparency = 1,
+	}, messageFrame)
+
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 2),
+	}, messageTextContainer)
+
+	local messageTitle = create("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Font = Enum.Font.GothamMedium,
+		Text = "Message",
+		TextColor3 = THEME.Text,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 31,
+	}, messageTextContainer)
+
+	local messageBody = create("TextLabel", {
+		Name = "Body",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Font = Enum.Font.Gotham,
+		Text = "",
+		TextColor3 = THEME.MutedText,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 31,
+	}, messageTextContainer)
+
 	local statusIcon = registerIcon(Icon.new():setLabel("● OFFLINE"):setTextColor(THEME.Danger):align("Left"))
 	local statsIcon = registerIcon(Icon.new():setLabel("Stats"):align("Left"))
 	local skyboxIcon = createSkyboxDropdown()
+	local spectateIcon = createSpectateIcon()
 	local rebootIcon = registerIcon(Icon.new():setLabel("Reboot"):align("Right"):oneClick())
 	local shutdownIcon = registerIcon(Icon.new():setLabel("Shutdown"):align("Right"):oneClick())
 
@@ -390,9 +867,13 @@ local function buildGui()
 		statsPanel = statsPanel,
 		statsLabel = statsLabel,
 		cameraHint = cameraHint,
+		messageFrame = messageFrame,
+		messageTitle = messageTitle,
+		messageBody = messageBody,
 		statusIcon = statusIcon,
 		statsIcon = statsIcon,
 		skyboxIcon = skyboxIcon,
+		spectateIcon = spectateIcon,
 		rebootIcon = rebootIcon,
 		shutdownIcon = shutdownIcon,
 	}
@@ -401,110 +882,36 @@ end
 local function showCameraHint()
 	local frame = ui.cameraHint
 	local stroke = frame:FindFirstChildOfClass("UIStroke")
+
 	frame.Visible = true
 
 	task.delay(8, function()
 		if not frame.Parent then
 			return
 		end
+
 		for i = 1, 15 do
 			local t = i / 15
-			frame.BackgroundTransparency = math.lerp(0.05, 1, t)
+			frame.BackgroundTransparency = lerp(0.05, 1, t)
+
 			if stroke then
-				stroke.Transparency = math.lerp(0.2, 1, t)
+				stroke.Transparency = lerp(0.2, 1, t)
 			end
-			for _, d in frame:GetDescendants() do
-				if d:IsA("TextLabel") then
-					d.TextTransparency = t
+
+			for _, descendant in frame:GetDescendants() do
+				if descendant:IsA("TextLabel") then
+					descendant.TextTransparency = t
 				end
 			end
+
 			task.wait(0.025)
 		end
+
 		frame.Visible = false
 	end)
 end
 
-local STAGE_COLORS = {
-	RUNNING = THEME.Success,
-	FAULT = THEME.Danger,
-}
-
-local function updateStage()
-	local powered = machine:isPowered()
-	ui.offOverlay.Visible = not powered
-
-	local stage = powered and machine:getBootStage() or "OFFLINE"
-	local color = STAGE_COLORS[stage] or (powered and THEME.Warning or THEME.Danger)
-	ui.statusIcon:setLabel("● " .. stage)
-	ui.statusIcon:setTextColor(color)
-end
-
-local function updateStats()
-	if not ui.statsPanel.Visible then
-		return
-	end
-
-	if not machine:isPowered() then
-		ui.statsLabel.Text = "POWERED OFF"
-		return
-	end
-
-	local s = machine:getStats()
-	local cpu = s.cpuStats or {}
-	local ram = s.ramStats or {}
-	local hdd = s.hddStats or {}
-	local bus = s.busStats or {}
-	local gpu = s.gpuStats or {}
-
-	ui.statsLabel.Text = string.format(
-		"Machina  [%s stats]\n\n"
-			.. "Stage      %s\n"
-			.. "Uptime     %.1fs\n"
-			.. "CPU cycles %d\n"
-			.. "CPU instrs %d\n"
-			.. "RAM r/w    %d / %d\n"
-			.. "HDD r/w    %d / %d\n"
-			.. "Bus IRQs   %d\n"
-			.. "GPU flush  %d",
-		STATS_TOGGLE_KEY.Name,
-		tostring(s.bootStage),
-		s.uptime or 0,
-		cpu.cycles or 0,
-		cpu.instructions or 0,
-		ram.reads or 0,
-		ram.writes or 0,
-		hdd.reads or 0,
-		hdd.writes or 0,
-		bus.irqFired or 0,
-		gpu.flushes or 0
-	)
-end
-
-local function powerOn()
-	if machine:isPowered() then
-		return
-	end
-	machine:powerOn()
-	machine:bindInput(UserInputService)
-	updateStage()
-end
-
-local function shutdown()
-	if not machine:isPowered() then
-		return
-	end
-	machine:shutdown()
-	updateStage()
-end
-
-local function reboot()
-	if not machine:isPowered() then
-		return
-	end
-	machine:reboot()
-	updateStage()
-end
-
+--// Input / Icons
 local function setupInput()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -514,6 +921,7 @@ local function setupInput()
 		if input.KeyCode == STATS_TOGGLE_KEY then
 			local visible = not ui.statsPanel.Visible
 			ui.statsPanel.Visible = visible
+
 			if visible then
 				ui.statsIcon:select()
 				updateStats()
@@ -542,13 +950,12 @@ local function setupInput()
 	UserInputService.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			if isPanning then
-				local pos = Vector2.new(input.Position.X, input.Position.Y)
-				applyPanDelta(pos - lastMousePos)
-				lastMousePos = pos
+				local position = Vector2.new(input.Position.X, input.Position.Y)
+				applyPanDelta(position - lastMousePos)
+				lastMousePos = position
 			end
 		elseif
-			input.UserInputType == Enum.UserInputType.MouseWheel
-			and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+			input.UserInputType == Enum.UserInputType.MouseWheel and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
 		then
 			currentCamera.FieldOfView =
 				math.clamp(currentCamera.FieldOfView - input.Position.Z * SCROLL_STEP, CAMERA_FOV_MIN, CAMERA_FOV_MAX)
@@ -563,14 +970,26 @@ local function setupIcons()
 		ui.statsPanel.Visible = true
 		updateStats()
 	end)
+
 	ui.statsIcon.deselected:Connect(function()
 		ui.statsPanel.Visible = false
 	end)
 
 	ui.rebootIcon.selected:Connect(reboot)
 	ui.shutdownIcon.selected:Connect(shutdown)
+
+	rebuildSpectateDropdown()
+
+	Players.PlayerAdded:Connect(function()
+		task.defer(rebuildSpectateDropdown)
+	end)
+
+	Players.PlayerRemoving:Connect(function()
+		task.defer(rebuildSpectateDropdown)
+	end)
 end
 
+--// Main
 local function main()
 	ui = buildGui()
 	showCameraHint()
@@ -578,9 +997,11 @@ local function main()
 	local editableImage = AssetService:CreateEditableImage({
 		Size = Vector2.new(Config.SCREEN_W, Config.SCREEN_H),
 	})
+
 	ui.imageLabel.ImageContent = Content.fromObject(editableImage)
 
 	machine = PcSystem.new(Config, editableImage)
+	machine.display = editableImage
 
 	setupInput()
 	setupIcons()
@@ -590,7 +1011,10 @@ local function main()
 	currentCamera.CFrame = baseCFrame
 	currentCamera.FieldOfView = CAMERA_FOV_DEFAULT
 
-	applySkybox(getSkyboxByName(DEFAULT_SKYBOX))
+	local menuData = remote:InvokeServer("GetMenuData")
+	local initialSkybox = menuData and menuData.self and menuData.self.skyboxName or DEFAULT_SKYBOX
+
+	applySkyboxByName(initialSkybox)
 	deskInstance.Rig:Destroy()
 
 	task.defer(disableCoreGui)
@@ -617,6 +1041,18 @@ local function main()
 		if statsTimer >= STATS_RATE then
 			statsTimer = 0
 			updateStats()
+		end
+
+		lastPush += dt
+		if lastPush >= FRAME_PUSH_RATE then
+			lastPush = 0
+			pushOwnFrame()
+		end
+
+		lastPull += dt
+		if lastPull >= FRAME_PULL_RATE then
+			lastPull = 0
+			pullSpectateFrame()
 		end
 	end)
 end
