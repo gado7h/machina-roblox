@@ -23,6 +23,11 @@
       "GameEnvironment": {
         "$path": "src/GameEnvironment.server.luau"
       }
+    },
+    "ServerStorage": {
+      "DESK_TEMPLATE": {
+        "$path": "src/DESK_TEMPLATE.rbxmx"
+      }
     }
   }
 }
