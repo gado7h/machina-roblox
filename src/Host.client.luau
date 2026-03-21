@@ -60,6 +60,14 @@ local SKY_PROPS = {
 	"CelestialBodiesShown",
 }
 
+local function getSkyboxByName(name: string)
+	for _, sky in ipairs(Skyboxes) do
+		if sky.Name == name then
+			return sky
+		end
+	end
+end
+
 local function createSkyFromData(name: string, data: {[string]: any}): Sky
 	local sky = Instance.new("Sky")
 	sky.Name = name
@@ -150,7 +158,6 @@ local function applySkybox(skyData)
 			child:Destroy()
 		end
 	end
-
 	local sky = createSkyFromData(skyData.Name, skyData)
 	sky.Parent = Lighting
 end
@@ -586,7 +593,7 @@ local function main()
 	currentCamera.CFrame = baseCFrame
 	currentCamera.FieldOfView = CAMERA_FOV_DEFAULT
 
-	applySkybox(Skyboxes[DEFAULT_SKYBOX])
+	applySkybox(getSkyboxByName(DEFAULT_SKYBOX))
 	deskInstance.Rig:Destroy()
 
 	task.defer(disableCoreGui)
