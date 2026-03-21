@@ -20,7 +20,7 @@ local screen: Part = deskInstance:WaitForChild("SCREEN")
 --// Modules
 local Icon = require(script.Parent.Parent.Packages.TopbarPlus)
 local Skyboxes = require(script.Parent.Skyboxes)
-local remote = script.Parent.Parent:FindFirstChildOfClass("RemoteFunction")
+local remote = script.Parent.Parent:WaitForChild("MachinaRemote") :: RemoteFunction
 
 local Config = require(script.Parent.Parent.Config)
 local PcSystem = require(script.Parent.Parent.platforms.x86.PcSystem)
@@ -68,6 +68,17 @@ local STAGE_COLORS = {
 	FAULT = THEME.Danger,
 }
 
+--// Types
+type SpectateState = {
+	targetUserId: number?,
+	targetName: string?,
+	targetDesk: Model?,
+	image: EditableImage?,
+	active: boolean,
+	targetScreenGui: SurfaceGui?,
+	targetScreenImageLabel: ImageLabel?,
+}
+
 --// State
 local machine
 local ui
@@ -83,37 +94,26 @@ local lastMousePos = Vector2.zero
 local lastPush = 0
 local lastPull = 0
 
-local spectateState = {
-	targetUserId = nil :: number?,
-	targetName = nil :: string?,
-	image = nil :: EditableImage?,
+local spectateState: SpectateState = {
+	targetUserId = nil,
+	targetName = nil,
+	targetDesk = nil,
+	image = nil,
 	active = false,
+	targetScreenGui = nil,
+	targetScreenImageLabel = nil,
 }
 
 local spectateDropdownIcons = {}
+local localSkyboxName = DEFAULT_SKYBOX
 
-local function destroySpectateDropdownIcons()
-	for _, icon in spectateDropdownIcons do
-		pcall(function()
-			icon:destroy()
-		end)
-	end
-
-	table.clear(spectateDropdownIcons)
-end
-
-local function trackSpectateDropdownIcon(icon)
-	table.insert(spectateDropdownIcons, icon)
-	return icon
-end
-
+--// Helpers
 local function lerp(a, b, t)
 	return a + (b - a) * t
 end
 
 local function create(className: string, props: { [string]: any }, parent: Instance?): Instance
 	local instance = Instance.new(className)
-
 	for key, value in props do
 		instance[key] = value
 	end
@@ -141,6 +141,109 @@ local function clampCameraOffset(offset: Vector2): Vector2
 	)
 end
 
+local function attemptRepeatedly(callback: () -> ())
+	for _ = 1, 6 do
+		if pcall(callback) then
+			return
+		end
+		task.wait(0.2)
+	end
+end
+
+local function getDeskByUserId(userId: number): Model?
+	for _, instance in workspace:GetChildren() do
+		if instance:IsA("Model") and instance:GetAttribute("OwnerUserId") == userId then
+			return instance
+		end
+	end
+
+	return nil
+end
+
+local function setModelVisibleLocal(model: Instance?, visible: boolean)
+	if not model then
+		return
+	end
+
+	local transparency = visible and 0 or 1
+
+	for _, obj in model:GetDescendants() do
+		if obj:IsA("BasePart") then
+			obj.LocalTransparencyModifier = transparency
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj.Transparency = transparency
+		end
+	end
+end
+
+local function destroySpectateScreenMirror()
+	if spectateState.targetScreenGui then
+		spectateState.targetScreenGui:Destroy()
+		spectateState.targetScreenGui = nil
+		spectateState.targetScreenImageLabel = nil
+	end
+end
+
+local function createSpectateScreenMirror(targetDesk: Model)
+	destroySpectateScreenMirror()
+
+	local targetScreen = targetDesk:FindFirstChild("SCREEN")
+	if not targetScreen or not targetScreen:IsA("BasePart") then
+		return
+	end
+
+	local surfaceGui = Instance.new("SurfaceGui")
+	surfaceGui.Name = "SpectateMirror"
+	surfaceGui.Adornee = targetScreen
+	surfaceGui.Face = Enum.NormalId.Front
+	surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+	surfaceGui.CanvasSize = Vector2.new(Config.SCREEN_W, Config.SCREEN_H)
+	surfaceGui.AlwaysOnTop = true
+	surfaceGui.LightInfluence = 0
+	surfaceGui.Brightness = 2
+	surfaceGui.MaxDistance = 0
+	surfaceGui.Parent = playerGui
+
+	local imageLabel = Instance.new("ImageLabel")
+	imageLabel.Name = "Screen"
+	imageLabel.Size = UDim2.fromScale(1, 1)
+	imageLabel.BackgroundColor3 = THEME.ScreenBackground
+	imageLabel.BorderSizePixel = 0
+	imageLabel.ScaleType = Enum.ScaleType.Stretch
+	imageLabel.ResampleMode = Enum.ResamplerMode.Pixelated
+	imageLabel.Parent = surfaceGui
+
+	spectateState.targetScreenGui = surfaceGui
+	spectateState.targetScreenImageLabel = imageLabel
+end
+
+--// Character visibility
+local function setCharacterVisible(visible: boolean)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local transparency = visible and 0 or 1
+
+	for _, obj in character:GetDescendants() do
+		if obj:IsA("BasePart") then
+			obj.LocalTransparencyModifier = transparency
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj.Transparency = transparency
+		end
+	end
+end
+
+player.CharacterAdded:Connect(function()
+	if spectateState.active then
+		task.defer(function()
+			setCharacterVisible(false)
+		end)
+	end
+end)
+
+--// Message UI
 local function showMessage(title: string, text: string, color: Color3?, duration: number?)
 	if not ui or not ui.messageFrame then
 		return
@@ -163,15 +266,6 @@ local function showMessage(title: string, text: string, color: Color3?, duration
 
 		ui.messageFrame.Visible = false
 	end)
-end
-
-local function attemptRepeatedly(callback: () -> ())
-	for _ = 1, 6 do
-		if pcall(callback) then
-			return
-		end
-		task.wait(0.2)
-	end
 end
 
 --// Skybox
@@ -254,7 +348,6 @@ local function setTopbarVisible(visible: boolean)
 
 	for _, icon in icons do
 		icon:setEnabled(visible)
-
 		if not visible then
 			icon:deselect()
 		end
@@ -274,8 +367,15 @@ local function ensureSpectateImage(width: number, height: number): EditableImage
 	local newImage = AssetService:CreateEditableImage({
 		Size = Vector2.new(width, height),
 	})
-
 	spectateState.image = newImage
+
+	local content = Content.fromObject(newImage)
+	ui.imageLabel.ImageContent = content
+
+	if spectateState.targetScreenImageLabel then
+		spectateState.targetScreenImageLabel.ImageContent = content
+	end
+
 	return newImage
 end
 
@@ -285,10 +385,19 @@ local function applySpectateFrame(result)
 	end
 
 	local frame = result.frame
+	local previousImage = spectateState.image
 	local image = ensureSpectateImage(frame.width, frame.height)
 
 	image:WritePixelsBuffer(Vector2.zero, Vector2.new(frame.width, frame.height), frame.buffer)
-	ui.imageLabel.ImageContent = Content.fromObject(image)
+
+	if image ~= previousImage then
+		local content = Content.fromObject(image)
+		ui.imageLabel.ImageContent = content
+
+		if spectateState.targetScreenImageLabel then
+			spectateState.targetScreenImageLabel.ImageContent = content
+		end
+	end
 
 	if result.cameraCFrame then
 		baseCFrame = result.cameraCFrame
@@ -300,24 +409,39 @@ local function applySpectateFrame(result)
 end
 
 local function stopSpectating()
-	spectateState.targetUserId = nil
-	spectateState.targetName = nil
-	spectateState.active = false
+	if not spectateState.active then
+		return
+	end
 
 	remote:InvokeServer("StopSpectate")
 
-	if spectateState.image then
-		ui.imageLabel.ImageContent = Content.fromObject(machine.display)
+	if spectateState.targetDesk then
+		setModelVisibleLocal(spectateState.targetDesk:FindFirstChild("Rig"), true)
 	end
 
+	destroySpectateScreenMirror()
+
+	spectateState.targetUserId = nil
+	spectateState.targetName = nil
+	spectateState.targetDesk = nil
+	spectateState.image = nil
+	spectateState.active = false
+
+	ui.imageLabel.ImageContent = Content.fromObject(machine.display)
+
 	baseCFrame = cameraPart.CFrame
-	showMessage("Spectate", "Stopped spectating current player.", THEME.MutedText)
+	resetCamera()
+	applySkyboxByName(localSkyboxName)
+
+	setCharacterVisible(true)
+
+	showMessage("Spectate", "Stopped spectating.", THEME.MutedText)
 end
 
 local function startSpectating(targetUserId: number)
 	local result = remote:InvokeServer("StartSpectate", targetUserId)
 	if not result or not result.ok then
-		showMessage(result and result.message or "Could not spectate.", THEME.Danger)
+		showMessage("Spectate Failed", result and result.message or "Could not spectate.", THEME.Danger)
 		return
 	end
 
@@ -325,18 +449,29 @@ local function startSpectating(targetUserId: number)
 	spectateState.targetName = result.targetName
 	spectateState.active = true
 
+	local targetDesk = getDeskByUserId(result.targetUserId)
+	spectateState.targetDesk = targetDesk
+
+	if targetDesk then
+		setModelVisibleLocal(targetDesk:FindFirstChild("Rig"), false)
+		createSpectateScreenMirror(targetDesk)
+	end
+
 	if result.cameraCFrame then
 		baseCFrame = result.cameraCFrame
 	end
+	cameraOffset = Vector2.zero
 
 	if result.skyboxName then
 		applySkyboxByName(result.skyboxName)
 	end
 
 	applySpectateFrame(result)
+	setCharacterVisible(false)
+
 	showMessage(
 		"Spectating",
-		("Now spectating %s."):format(result.targetDisplayName or result.targetName),
+		("Now spectating %s."):format(result.targetDisplayName or result.targetName or "unknown"),
 		THEME.Success
 	)
 end
@@ -351,6 +486,24 @@ local function pullSpectateFrame()
 		showMessage("Spectate Ended", result and result.message or "Spectate ended.", THEME.Warning)
 		stopSpectating()
 		return
+	end
+
+	if spectateState.targetUserId ~= result.targetUserId then
+		local targetDesk = result.targetUserId and getDeskByUserId(result.targetUserId) or nil
+
+		if spectateState.targetDesk and spectateState.targetDesk ~= targetDesk then
+			setModelVisibleLocal(spectateState.targetDesk:FindFirstChild("Rig"), true)
+		end
+
+		spectateState.targetUserId = result.targetUserId
+		spectateState.targetDesk = targetDesk
+
+		if targetDesk then
+			setModelVisibleLocal(targetDesk:FindFirstChild("Rig"), false)
+			createSpectateScreenMirror(targetDesk)
+		else
+			destroySpectateScreenMirror()
+		end
 	end
 
 	applySpectateFrame(result)
@@ -378,6 +531,22 @@ local function pushOwnFrame()
 		height = size.Y,
 		buffer = pixels,
 	})
+end
+
+--// Spectate dropdown
+local function destroySpectateDropdownIcons()
+	for _, icon in spectateDropdownIcons do
+		pcall(function()
+			icon:destroy()
+		end)
+	end
+
+	table.clear(spectateDropdownIcons)
+end
+
+local function trackSpectateDropdownIcon(icon)
+	table.insert(spectateDropdownIcons, icon)
+	return icon
 end
 
 local function rebuildSpectateDropdown()
@@ -412,13 +581,10 @@ local function rebuildSpectateDropdown()
 
 	table.insert(dropdownIcons, toggleIcon)
 
-	local stopIcon = trackSpectateDropdownIcon(
-		Icon.new():setLabel("Stop Spectating"):oneClick(true):autoDeselect(true)
-	)
+	local stopIcon = trackSpectateDropdownIcon(Icon.new():setLabel("Stop Spectating"):oneClick(true):autoDeselect(true))
 
 	stopIcon.selected:Connect(function()
 		stopSpectating()
-		showMessage("Spectate", "Stopped spectating current player.", THEME.MutedText)
 		rebuildSpectateDropdown()
 	end)
 
@@ -426,7 +592,6 @@ local function rebuildSpectateDropdown()
 
 	for _, entry in ipairs(result.players) do
 		local suffix = entry.spectatorsAllowed and "" or " [NOT ALLOWED]"
-
 		local playerIcon = trackSpectateDropdownIcon(
 			Icon.new()
 				:setLabel(("%s (@%s)%s"):format(entry.displayName, entry.name, suffix))
@@ -446,7 +611,6 @@ local function rebuildSpectateDropdown()
 			end
 
 			startSpectating(entry.userId)
-			showMessage("Spectating", ("Now spectating %s."):format(entry.displayName), THEME.Success)
 			rebuildSpectateDropdown()
 		end)
 
@@ -456,6 +620,7 @@ local function rebuildSpectateDropdown()
 	ui.spectateIcon:setDropdown(dropdownIcons)
 end
 
+--// Machine status
 local function updateStage()
 	local powered = machine:isPowered()
 	ui.offOverlay.Visible = not powered
@@ -508,6 +673,7 @@ local function updateStats()
 	)
 end
 
+--// Power
 local function powerOn()
 	if machine:isPowered() then
 		return
@@ -536,25 +702,28 @@ local function reboot()
 	updateStage()
 end
 
---// UI
+--// UI construction
 local function createSkyboxDropdown()
 	local entries = table.clone(Skyboxes)
-
 	table.sort(entries, function(a, b)
 		return a.Name < b.Name
 	end)
 
 	local skyIcons = {}
-
 	for _, skyData in entries do
 		local skyIcon = Icon.new():setLabel(skyData.Name):oneClick(true):autoDeselect(true)
-
 		skyIcon.selected:Connect(function()
 			applySkybox(skyData)
-			remote:InvokeServer("SetSkybox", skyData.Name)
-			showMessage("Skybox", ("Skybox set to %s."):format(skyData.Name), THEME.Success)
-		end)
 
+			local response = remote:InvokeServer("SetSkybox", skyData.Name)
+			if response and response.ok and type(response.skyboxName) == "string" then
+				localSkyboxName = response.skyboxName
+			else
+				localSkyboxName = skyData.Name
+			end
+
+			showMessage("Skybox", ("Skybox set to %s."):format(localSkyboxName), THEME.Success)
+		end)
 		table.insert(skyIcons, skyIcon)
 	end
 
@@ -664,11 +833,7 @@ local function buildGui()
 	}, gui)
 
 	create("UICorner", { CornerRadius = UDim.new(0, 10) }, statsPanel)
-	create("UIStroke", {
-		Color = Color3.fromRGB(40, 46, 58),
-		Transparency = 0.15,
-		Thickness = 1,
-	}, statsPanel)
+	create("UIStroke", { Color = Color3.fromRGB(40, 46, 58), Transparency = 0.15, Thickness = 1 }, statsPanel)
 	create("UIPadding", {
 		PaddingTop = UDim.new(0, 12),
 		PaddingBottom = UDim.new(0, 12),
@@ -702,11 +867,7 @@ local function buildGui()
 	}, gui)
 
 	create("UICorner", { CornerRadius = UDim.new(0, 14) }, cameraHint)
-	create("UIStroke", {
-		Color = Color3.fromRGB(60, 70, 90),
-		Transparency = 0.2,
-		Thickness = 1,
-	}, cameraHint)
+	create("UIStroke", { Color = Color3.fromRGB(60, 70, 90), Transparency = 0.2, Thickness = 1 }, cameraHint)
 	create("UIPadding", {
 		PaddingTop = UDim.new(0, 10),
 		PaddingBottom = UDim.new(0, 10),
@@ -725,9 +886,7 @@ local function buildGui()
 		BackgroundTransparency = 0.2,
 		BorderSizePixel = 0,
 	}, cameraHint)
-
 	create("UICorner", { CornerRadius = UDim.new(1, 0) }, hintIcon)
-
 	create("TextLabel", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -741,12 +900,10 @@ local function buildGui()
 		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundTransparency = 1,
 	}, cameraHint)
-
 	create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Vertical,
 		Padding = UDim.new(0, 2),
 	}, textContainer)
-
 	create("TextLabel", {
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.XY,
@@ -756,7 +913,6 @@ local function buildGui()
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, textContainer)
-
 	create("TextLabel", {
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.XY,
@@ -780,11 +936,7 @@ local function buildGui()
 	}, gui)
 
 	create("UICorner", { CornerRadius = UDim.new(0, 14) }, messageFrame)
-	create("UIStroke", {
-		Color = Color3.fromRGB(60, 70, 90),
-		Transparency = 0.2,
-		Thickness = 1,
-	}, messageFrame)
+	create("UIStroke", { Color = Color3.fromRGB(60, 70, 90), Transparency = 0.2, Thickness = 1 }, messageFrame)
 	create("UIPadding", {
 		PaddingTop = UDim.new(0, 10),
 		PaddingBottom = UDim.new(0, 10),
@@ -804,9 +956,7 @@ local function buildGui()
 		BackgroundTransparency = 0.2,
 		BorderSizePixel = 0,
 	}, messageFrame)
-
 	create("UICorner", { CornerRadius = UDim.new(1, 0) }, messageIcon)
-
 	create("TextLabel", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -822,11 +972,11 @@ local function buildGui()
 		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundTransparency = 1,
 	}, messageFrame)
-
-	create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Vertical,
-		Padding = UDim.new(0, 2),
-	}, messageTextContainer)
+	create(
+		"UIListLayout",
+		{ FillDirection = Enum.FillDirection.Vertical, Padding = UDim.new(0, 2) },
+		messageTextContainer
+	)
 
 	local messageTitle = create("TextLabel", {
 		Name = "Title",
@@ -882,7 +1032,6 @@ end
 local function showCameraHint()
 	local frame = ui.cameraHint
 	local stroke = frame:FindFirstChildOfClass("UIStroke")
-
 	frame.Visible = true
 
 	task.delay(8, function()
@@ -911,7 +1060,7 @@ local function showCameraHint()
 	end)
 end
 
---// Input / Icons
+--// Input
 local function setupInput()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -933,8 +1082,7 @@ local function setupInput()
 		elseif input.KeyCode == Enum.KeyCode.R and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt) then
 			resetCamera()
 		elseif
-			input.UserInputType == Enum.UserInputType.MouseButton1
-			and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+			input.UserInputType == Enum.UserInputType.MouseButton1 and UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
 		then
 			isPanning = true
 			lastMousePos = Vector2.new(input.Position.X, input.Position.Y)
@@ -963,6 +1111,7 @@ local function setupInput()
 	end)
 end
 
+--// Icon wiring
 local function setupIcons()
 	ui.offOverlay.Activated:Connect(powerOn)
 
@@ -978,18 +1127,27 @@ local function setupIcons()
 	ui.rebootIcon.selected:Connect(reboot)
 	ui.shutdownIcon.selected:Connect(shutdown)
 
-	rebuildSpectateDropdown()
+	ui.spectateIcon.selected:Connect(function()
+		rebuildSpectateDropdown()
+	end)
 
 	Players.PlayerAdded:Connect(function()
 		task.defer(rebuildSpectateDropdown)
 	end)
 
-	Players.PlayerRemoving:Connect(function()
+	Players.PlayerRemoving:Connect(function(leavingPlayer)
+		if spectateState.active and spectateState.targetUserId == leavingPlayer.UserId then
+			stopSpectating()
+			showMessage("Spectate Ended", ("%s left the game."):format(leavingPlayer.DisplayName), THEME.Warning)
+		end
+
 		task.defer(rebuildSpectateDropdown)
 	end)
+
+	rebuildSpectateDropdown()
 end
 
---// Main
+--// Entry point
 local function main()
 	ui = buildGui()
 	showCameraHint()
@@ -997,7 +1155,6 @@ local function main()
 	local editableImage = AssetService:CreateEditableImage({
 		Size = Vector2.new(Config.SCREEN_W, Config.SCREEN_H),
 	})
-
 	ui.imageLabel.ImageContent = Content.fromObject(editableImage)
 
 	machine = PcSystem.new(Config, editableImage)
@@ -1013,10 +1170,10 @@ local function main()
 
 	local menuData = remote:InvokeServer("GetMenuData")
 	local initialSkybox = menuData and menuData.self and menuData.self.skyboxName or DEFAULT_SKYBOX
-
+	localSkyboxName = initialSkybox
 	applySkyboxByName(initialSkybox)
-	deskInstance.Rig:Destroy()
 
+	setModelVisibleLocal(deskInstance:FindFirstChild("Rig"), false)
 	task.defer(disableCoreGui)
 
 	if AUTO_POWER then
