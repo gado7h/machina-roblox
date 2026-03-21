@@ -6,13 +6,13 @@
 
     "ReplicatedStorage": {
       "platforms": {
-        "$path": "src/Machina/src/platforms"
+        "$path": "Machina/src/platforms"
       },
       "Config": {
-        "$path": "src/Machina/src/Config.luau"
+        "$path": "Machina/src/Config.luau"
       },
       "net_bridge": {
-        "$path": "src/Machina/src/net_bridge"
+        "$path": "Machina/src/net_bridge"
       },
       "Host": {
         "$className": "Folder",

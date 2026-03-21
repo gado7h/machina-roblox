@@ -54,10 +54,6 @@ local SKY_PROPS = {
 	"SkyboxLf",
 	"SkyboxRt",
 	"SkyboxUp",
-	"SunAngularSize",
-	"MoonAngularSize",
-	"StarCount",
-	"CelestialBodiesShown",
 }
 
 local function getSkyboxByName(name: string)
