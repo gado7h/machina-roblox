@@ -1,7 +1,6 @@
 local CAPTION_COLOR = Color3.fromRGB(39, 41, 48)
 local TEXT_SIZE = 15
 return function(icon)
-
 	-- Credit to lolmansReturn and Canary Software for
 	-- retrieving these values
 	local clickRegion = icon:getInstance("ClickRegion")
@@ -26,11 +25,8 @@ return function(icon)
 
 	local header = Instance.new("TextLabel")
 	header.Name = "Header"
-	header.FontFace = Font.new(
-		"rbxasset://fonts/families/BuilderSans.json",
-		Enum.FontWeight.Medium,
-		Enum.FontStyle.Normal
-	)
+	header.FontFace =
+		Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 	header.Text = "Caption"
 	header.TextColor3 = Color3.fromRGB(255, 255, 255)
 	header.TextSize = TEXT_SIZE
@@ -104,11 +100,8 @@ return function(icon)
 	local labelContent = Instance.new("TextLabel")
 	labelContent.AutoLocalize = false
 	labelContent.Name = "LabelContent"
-	labelContent.FontFace = Font.new(
-		"rbxasset://fonts/families/GothamSSm.json",
-		Enum.FontWeight.Medium,
-		Enum.FontStyle.Normal
-	)
+	labelContent.FontFace =
+		Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 	labelContent.Text = ""
 	labelContent.TextColor3 = Color3.fromRGB(189, 190, 190)
 	labelContent.TextSize = TEXT_SIZE
@@ -118,7 +111,7 @@ return function(icon)
 	labelContent.Size = UDim2.fromScale(1, 1)
 	labelContent.ZIndex = 16
 	labelContent.Parent = keyTag1
-	
+
 	local caret = Instance.new("ImageLabel")
 	caret.Name = "Caret"
 	caret.Image = "rbxassetid://101906294438076"
@@ -145,7 +138,7 @@ return function(icon)
 	box:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		dropShadow.Size = UDim2.new(1, 0, 0, box.AbsoluteSize.Y + 8)
 	end)
-	
+
 	-- It's important we match the sizes as this is not
 	-- handles within clipOutside (as it assumes the sizes
 	-- are already the same)
@@ -158,9 +151,7 @@ return function(icon)
 	end
 	captionJanitor:add(caption:GetPropertyChangedSignal("AbsoluteSize"):Connect(matchSize))
 	matchSize()
-	
-	
-	
+
 	-- This handles the appearing/disappearing/positioning of the caption
 	local isCompletelyEnabled = false
 	local captionHeader = caption.Box.Header
@@ -199,19 +190,18 @@ return function(icon)
 		return UDim2.new(0.5, 0, 1, yOffset)
 	end
 	local function updatePosition(forcedEnabled)
-		
 		-- Ignore changes if not enabled to reduce redundant calls
 		if not isCompletelyEnabled then
 			return
 		end
-		
+
 		-- Currently the one thing which isn't accounted for are the bounds of the screen
 		-- This would be an issue if someone sets a long caption text for the left or
 		-- right most icon
 		local enabled = if forcedEnabled ~= nil then forcedEnabled else isCompletelyEnabled
 		local startPosition = getCaptionPosition(not enabled)
 		local endPosition = getCaptionPosition(enabled)
-		
+
 		-- It's essential we reset the carets position to prevent the x sizing bounds
 		-- of the caption from infinitely scaling up
 		if enabled then
@@ -224,11 +214,14 @@ return function(icon)
 			caption.AutomaticSize = Enum.AutomaticSize.Y
 			caption.Size = UDim2.fromOffset(absolute.X, absolute.Y)
 		end
-		
+
 		-- We initially default to the opposite state
 		local previousCaretX
 		local function updateCaret()
-			local caretX = clickRegion.AbsolutePosition.X - caption.AbsolutePosition.X + clickRegion.AbsoluteSize.X/2 - caret.AbsoluteSize.X/2
+			local caretX = clickRegion.AbsolutePosition.X
+				- caption.AbsolutePosition.X
+				+ clickRegion.AbsoluteSize.X / 2
+				- caret.AbsoluteSize.X / 2
 			local caretY = caret.Position.Y.Offset
 			local newCaretPosition = UDim2.fromOffset(caretX, caretY)
 			if previousCaretX ~= caretX then
@@ -244,22 +237,21 @@ return function(icon)
 		end
 		captionClone.Position = startPosition
 		updateCaret()
-		
+
 		-- Now we tween into the new state
 		local tweenInfo = (enabled and TWEEN_INFO_IN) or TWEEN_INFO_OUT
-		local tween = TweenService:Create(captionClone, tweenInfo, {Position = endPosition})
+		local tween = TweenService:Create(captionClone, tweenInfo, { Position = endPosition })
 		local updateCaretConnection = RunService.Heartbeat:Connect(updateCaret)
 		tween:Play()
 		tween.Completed:Once(function()
 			updateCaretConnection:Disconnect()
 		end)
-		
 	end
 	captionJanitor:add(clickRegion:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		updatePosition()
 	end))
 	updatePosition(false)
-	
+
 	captionJanitor:add(icon.toggleKeyAdded:Connect(updateHotkey))
 	for keyCodeEnum, _ in pairs(icon.bindedToggleKeys) do
 		updateHotkey(keyCodeEnum)
@@ -283,7 +275,7 @@ return function(icon)
 		local newTransparency = (enabled and 0) or 1
 		local tweenInfo = (enabled and TWEEN_INFO_IN) or TWEEN_INFO_OUT
 		local tweenTransparency = TweenService:Create(caption, tweenInfo, {
-			GroupTransparency = newTransparency
+			GroupTransparency = newTransparency,
 		})
 		tweenTransparency:Play()
 		if enabled then
@@ -292,7 +284,7 @@ return function(icon)
 		updatePosition()
 		updateHotkey()
 	end
-	
+
 	local WAIT_DURATION = 0.5
 	local RECOVER_PERIOD = 0.3
 	local Icon = require(icon.iconModule)
@@ -311,6 +303,6 @@ return function(icon)
 			setCaptionEnabled(false)
 		end
 	end))
-	
+
 	return caption
 end

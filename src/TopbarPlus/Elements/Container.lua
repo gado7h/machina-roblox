@@ -1,11 +1,10 @@
 local hasBecomeOldTheme = false
 local previousInsetHeight = 0
 return function(Icon)
-	
 	-- Has to be included for the time being due to this bug mentioned here:
 	-- https://devforum.roblox.com/t/bug/2973508/7
 	local GuiService = game:GetService("GuiService")
-	local Players =  game:GetService("Players")
+	local Players = game:GetService("Players")
 	local UserInputService = game:GetService("UserInputService")
 	local container = {}
 	local Signal = require(script.Parent.Parent.Packages.GoodSignal)
@@ -20,7 +19,6 @@ return function(Icon)
 	local function checkInset(status)
 		local currentHeight = GuiService.TopbarInset.Height
 		local isOldTopbar = currentHeight <= 36
-		
 
 		-- These additional checks are needed to ensure *it is actually* the old topbar
 		-- and not a client which takes a really long time to load
@@ -45,7 +43,13 @@ return function(Icon)
 		end
 
 		-- Conver to old theme if verified
-		if Icon.isOldTopbar and not isConsoleScreen and not isUsingVR and hasBecomeOldTheme == false and (currentHeight ~= 0 or status == "ForceConvertToOld") then
+		if
+			Icon.isOldTopbar
+			and not isConsoleScreen
+			and not isUsingVR
+			and hasBecomeOldTheme == false
+			and (currentHeight ~= 0 or status == "ForceConvertToOld")
+		then
 			hasBecomeOldTheme = true
 			task.defer(function()
 				-- If oldtopbar, apply the Classic theme
@@ -69,7 +73,7 @@ return function(Icon)
 		-- Modify the offsets slightly depending on device type
 		guiInset = GuiService:GetGuiInset()
 		startInset = if isOldTopbar then 12 else guiInset.Y - 50
-		yDownOffset = if isOldTopbar then 2 else 0 --if isOldTopbar then 2 else 0 
+		yDownOffset = if isOldTopbar then 2 else 0 --if isOldTopbar then 2 else 0
 		ySizeOffset = -2
 		if isConsoleScreen then
 			startInset = 10
@@ -89,7 +93,6 @@ return function(Icon)
 				Icon.insetHeightChanged:Fire(insetHeight)
 			end)
 		end
-		
 	end
 	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(checkInset)
 	checkInset("FirstTime")
@@ -122,11 +125,11 @@ return function(Icon)
 	holders.Visible = true
 	holders.ZIndex = 1
 	holders.Parent = screenGui
-	
+
 	local screenGuiCenter = screenGui:Clone()
 	local holdersCenter = screenGuiCenter.Holders
 	local function updateCenteredHoldersHeight()
-		holdersCenter.Size = UDim2.new(1, 0, 0, GuiService.TopbarInset.Height+ySizeOffset)
+		holdersCenter.Size = UDim2.new(1, 0, 0, GuiService.TopbarInset.Height + ySizeOffset)
 	end
 	screenGuiCenter.Name = "TopbarCentered"
 	screenGuiCenter.DisplayOrder = Icon.baseDisplayOrder
@@ -135,26 +138,26 @@ return function(Icon)
 		screenGuiCenter.DisplayOrder = Icon.baseDisplayOrder
 	end)
 	container[screenGuiCenter.Name] = screenGuiCenter
-	
+
 	insetChanged:Connect(updateCenteredHoldersHeight)
 	updateCenteredHoldersHeight()
-	
+
 	local screenGuiClipped = screenGui:Clone()
-	screenGuiClipped.Name = screenGuiClipped.Name.."Clipped"
+	screenGuiClipped.Name = screenGuiClipped.Name .. "Clipped"
 	screenGuiClipped.DisplayOrder = (Icon.baseDisplayOrder + 1)
 	Icon.baseDisplayOrderChanged:Connect(function()
 		screenGuiClipped.DisplayOrder = (Icon.baseDisplayOrder + 1)
 	end)
 	container[screenGuiClipped.Name] = screenGuiClipped
-	
+
 	local screenGuiCenterClipped = screenGuiCenter:Clone()
-	screenGuiCenterClipped.Name = screenGuiCenterClipped.Name.."Clipped"
+	screenGuiCenterClipped.Name = screenGuiCenterClipped.Name .. "Clipped"
 	screenGuiCenterClipped.DisplayOrder = (Icon.baseDisplayOrder + 1)
 	Icon.baseDisplayOrderChanged:Connect(function()
 		screenGuiCenterClipped.DisplayOrder = (Icon.baseDisplayOrder + 1)
 	end)
 	container[screenGuiCenterClipped.Name] = screenGuiCenterClipped
-	
+
 	local holderReduction = -24
 	local left = Instance.new("ScrollingFrame")
 	left:SetAttribute("IsAHolder", true)
@@ -175,10 +178,10 @@ return function(Icon)
 	left.ScrollBarThickness = 0
 	left.BorderSizePixel = 0
 	left.Selectable = false
-	left.ScrollingEnabled = false--true
+	left.ScrollingEnabled = false --true
 	left.ElasticBehavior = Enum.ElasticBehavior.Never
 	left.Parent = holders
-	
+
 	local UIListLayout = Instance.new("UIListLayout")
 	insetChanged:Connect(function()
 		UIListLayout.Padding = UDim.new(0, startInset)
@@ -188,7 +191,7 @@ return function(Icon)
 	UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 	UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	UIListLayout.Parent = left
-	
+
 	local center = left:Clone()
 	insetChanged:Connect(function()
 		center.UIListLayout.Padding = UDim.new(0, startInset)
@@ -197,7 +200,7 @@ return function(Icon)
 	center.UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	center.Name = "Center"
 	center.Parent = holdersCenter
-	
+
 	local right = left:Clone()
 	insetChanged:Connect(function()
 		right.UIListLayout.Padding = UDim.new(0, startInset)

@@ -3,8 +3,6 @@
 -- of the screen. The overflow handler solves this challenge by moving the out-of-bounds
 -- icon into an overflow menu (with a limited scrolling canvas) preventing overlaps occuring
 
-
-
 -- LOCAL
 local Overflow = {}
 local holders = {}
@@ -17,8 +15,6 @@ local Utility = require(script.Parent.Parent.Utility)
 local beginCheckingCenterIcons = false
 local beganSecondaryCenterCheck = false
 local Icon
-
-
 
 -- FUNCTIONS
 -- This is called upon the Icon initializing
@@ -86,7 +82,6 @@ function Overflow.getAvailableIcons(alignment)
 end
 
 function Overflow.updateAvailableIcons(alignment)
-
 	-- We only track items that are directly on the topbar (i.e. not within a parent icon)
 	local ourTotal = 0
 	local ourOrderedIcons = {}
@@ -131,7 +126,6 @@ function Overflow.updateAvailableIcons(alignment)
 	-- Finish up
 	orderedAvailableIcons[alignment] = ourOrderedIcons
 	return ourOrderedIcons
-
 end
 
 function Overflow.getRealXPositions(alignment, orderedIcons)
@@ -164,7 +158,6 @@ function Overflow.getRealXPositions(alignment, orderedIcons)
 end
 
 function Overflow.updateBoundary(alignment)
-
 	-- We only track items that are directly on the topbar (i.e. not within a parent icon) or within an overflow
 	local holder = holders[alignment]
 	local holderUIList = holder.UIListLayout
@@ -183,7 +176,7 @@ function Overflow.updateBoundary(alignment)
 	if ourTotal <= 0 then
 		return
 	end
-	
+
 	-- These are the icons with menus which icons will be moved into
 	-- when overflowing
 	local isCentral = alignment == "Center"
@@ -192,9 +185,9 @@ function Overflow.updateBoundary(alignment)
 	local overflowIcon = overflowIcons[alignment]
 	if not overflowIcon and not isCentral and #ourOrderedIcons > 0 then
 		local order = (isLeft and -9999999) or 9999999
-		overflowIcon = Icon.new()--:setLabel(`{alignment}`)
+		overflowIcon = Icon.new() --:setLabel(`{alignment}`)
 		overflowIcon:setImage(6069276526, "Deselected")
-		overflowIcon:setName("Overflow"..alignment)
+		overflowIcon:setName("Overflow" .. alignment)
 		overflowIcon:setOrder(order)
 		overflowIcon:setAlignment(alignment)
 		overflowIcon:autoDeselect(false)
@@ -214,7 +207,8 @@ function Overflow.updateBoundary(alignment)
 	-- and left-most-right-icon meet OR the opposite side of the screen
 	local oppositeAlignment = (alignment == "Left" and "Right") or "Left"
 	local oppositeOrderedIcons = Overflow.updateAvailableIcons(oppositeAlignment)
-	local nearestOppositeIcon = (isLeft and oppositeOrderedIcons[1]) or (isRight and oppositeOrderedIcons[#oppositeOrderedIcons])
+	local nearestOppositeIcon = (isLeft and oppositeOrderedIcons[1])
+		or (isRight and oppositeOrderedIcons[#oppositeOrderedIcons])
 	local oppositeOverflowIcon = overflowIcons[oppositeAlignment]
 	local boundary = (isLeft and holderXPos + holderXSize) or holderXPos
 	if nearestOppositeIcon then
@@ -223,7 +217,7 @@ function Overflow.updateBoundary(alignment)
 		local oppositeXSize = Overflow.getWidth(nearestOppositeIcon)
 		boundary = (isLeft and oppositeX - BOUNDARY_GAP) or oppositeX + oppositeXSize + BOUNDARY_GAP
 	end
-	
+
 	-- We get the left-most icon (if left alignment) or right-most-icon (if
 	-- right alignment) of the central icons group to see if we need to change
 	-- the boundary (if the central icon boundary is smaller than the alignment
@@ -245,7 +239,8 @@ function Overflow.updateBoundary(alignment)
 			local centralNearestXPos = nearestCenterIcon.widget.AbsolutePosition.X
 			local ourNearestXPos = ourNearestIcon.widget.AbsolutePosition.X
 			local ourNearestXSize = Overflow.getWidth(ourNearestIcon)
-			local centerBoundary = (isLeft and centralNearestXPos-BOUNDARY_GAP) or centralNearestXPos + Overflow.getWidth(nearestCenterIcon) + BOUNDARY_GAP
+			local centerBoundary = (isLeft and centralNearestXPos - BOUNDARY_GAP)
+				or centralNearestXPos + Overflow.getWidth(nearestCenterIcon) + BOUNDARY_GAP
 			local removeBoundary = (isLeft and ourNearestXPos + ourNearestXSize) or ourNearestXPos
 			local hasShifted = false
 			if isLeft then
@@ -279,7 +274,7 @@ function Overflow.updateBoundary(alignment)
 		end
 	end
 	checkToShiftCentralIcon()
-	
+
 	--[[
 	This updates the maximum size of the overflow menus
 	The menu determines its bounds from the smallest of either:
@@ -296,12 +291,13 @@ function Overflow.updateBoundary(alignment)
 			local oppositeWidget = oppositeOverflowIcon.widget
 			local oppositeXPos = oppositeWidget.AbsolutePosition.X
 			local oppositeXSize = Overflow.getWidth(oppositeOverflowIcon)
-			local oppositeBoundary = (isLeft and oppositeXPos - BOUNDARY_GAP) or oppositeXPos + oppositeXSize + BOUNDARY_GAP
+			local oppositeBoundary = (isLeft and oppositeXPos - BOUNDARY_GAP)
+				or oppositeXPos + oppositeXSize + BOUNDARY_GAP
 			local oppositeMenu = oppositeOverflowIcon:getInstance("Menu")
 			local isDominant = menu.AbsoluteCanvasSize.X >= oppositeMenu.AbsoluteCanvasSize.X
 			if not usingNearestCenter then
-				local halfwayXPos = holderXPos + holderXSize/2
-				local halfwayBoundary = (isLeft and halfwayXPos - BOUNDARY_GAP/2) or halfwayXPos + BOUNDARY_GAP/2
+				local halfwayXPos = holderXPos + holderXSize / 2
+				local halfwayBoundary = (isLeft and halfwayXPos - BOUNDARY_GAP / 2) or halfwayXPos + BOUNDARY_GAP / 2
 				menuBoundary = halfwayBoundary
 				if isDominant then
 					menuBoundary = oppositeBoundary
@@ -341,20 +337,17 @@ function Overflow.updateBoundary(alignment)
 			end
 		end
 	end
-	
+
 	-- Hide the overflows when not in use
 	if overflowIcon.isEnabled ~= joinOverflow then
 		overflowIcon:setEnabled(joinOverflow)
 	end
-	
+
 	-- Have the menus auto selected
 	if overflowIcon.isEnabled and not overflowIcon.overflowAlreadyOpened then
 		overflowIcon.overflowAlreadyOpened = true
 		overflowIcon:select()
 	end
-
 end
-
-
 
 return Overflow

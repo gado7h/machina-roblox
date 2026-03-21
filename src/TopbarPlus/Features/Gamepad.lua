@@ -4,14 +4,10 @@
 -- keyboards) because gamepads are greatly more unqiue and require
 -- additional tailored programming
 
-
-
 -- SERVICES
 local GamepadService = game:GetService("GamepadService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
-
-
 
 -- LOCAL
 local DEFAULT_HIGHLIGHT_KEY = Enum.KeyCode.DPadUp -- The default key to highlight the topbar icon
@@ -19,17 +15,14 @@ local GAMEPAD_INPUT = Enum.PreferredInput.Gamepad
 local Gamepad = {}
 local Icon
 
-
-
 -- FUNCTIONS
 -- This is called upon the Icon initializing
 function Gamepad.start(incomingIcon)
-	
 	-- Public variables
 	Icon = incomingIcon
 	Icon.highlightKey = if Icon.highlightKey ~= nil then Icon.highlightKey else DEFAULT_HIGHLIGHT_KEY -- What controller key to highlight the topbar (or set to false to disable)
 	Icon.highlightIcon = false -- Change to a specific icon if you'd like to highlight a specific icon instead of the left-most
-	
+
 	-- We defer so the developer can make changes before the
 	-- gamepad controls are initialized
 	task.delay(1, function()
@@ -41,7 +34,7 @@ function Gamepad.start(incomingIcon)
 			local icon = iconUID and iconsDict[iconUID]
 			return icon
 		end
-		
+
 		-- This enables users to instantly open up their last selected icon
 		local previousHighlightedIcon
 		local usedIndicatorOnce = DEFAULT_HIGHLIGHT_KEY ~= Icon.highlightKey
@@ -66,7 +59,11 @@ function Gamepad.start(incomingIcon)
 				if previousHighlightedIcon and previousHighlightedIcon ~= icon then
 					previousHighlightedIcon:setIndicator()
 				end
-				local newIndicator = if isUsingGamepad and not usedBOnce and not icon.parentIconUID then Enum.KeyCode.ButtonB else nil
+				local newIndicator = if isUsingGamepad
+						and not usedBOnce
+						and not icon.parentIconUID
+					then Enum.KeyCode.ButtonB
+					else nil
 				previousHighlightedIcon = icon
 				Icon.lastHighlightedIcon = icon
 				icon:setIndicator(newIndicator)
@@ -180,13 +177,13 @@ function Gamepad.registerButton(buttonInstance)
 			return
 		end
 		local isSelected = GuiService.SelectedObject == buttonInstance
-		local unselectKeyCodes = {"ButtonB", "ButtonSelect"}
+		local unselectKeyCodes = { "ButtonB", "ButtonSelect" }
 		local keyName = input.KeyCode.Name
 		if table.find(unselectKeyCodes, keyName) and isSelected then
 			-- We unfocus when back button is pressed, but ignore
 			-- if the virtual cursor is disabled otherwise it will be
 			-- impossible to select the topbar
-			if not(keyName == "ButtonSelect" and not GamepadService.GamepadCursorEnabled) then
+			if not (keyName == "ButtonSelect" and not GamepadService.GamepadCursorEnabled) then
 				GuiService.SelectedObject = nil
 			end
 		end
@@ -195,7 +192,5 @@ function Gamepad.registerButton(buttonInstance)
 		connection:Disconnect()
 	end)
 end
-
-
 
 return Gamepad

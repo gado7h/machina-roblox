@@ -35,8 +35,8 @@ local CAMERA_FOV_MAX = 85
 local CAMERA_BOUNDS_X = 1.4
 local CAMERA_BOUNDS_Y = 0.9
 
-local STATS_RATE = 0.5 
-local STAGE_RATE = 0.15 
+local STATS_RATE = 0.5
+local STAGE_RATE = 0.15
 
 local THEME = {
 	Text = Color3.fromRGB(238, 241, 245),
@@ -69,7 +69,7 @@ local function getSkyboxByName(name: string)
 	return false
 end
 
-local function createSkyFromData(name: string, data: {[string]: any}): Sky
+local function createSkyFromData(name: string, data: { [string]: any }): Sky
 	local sky = Instance.new("Sky")
 	sky.Name = name
 
@@ -88,7 +88,7 @@ local ui
 local icons = {}
 local topbarVisible = true
 
-local baseCFrame: CFrame 
+local baseCFrame: CFrame
 local cameraOffset = Vector2.zero
 local isPanning = false
 local lastMousePos = Vector2.zero
