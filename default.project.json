@@ -1,0 +1,28 @@
+{
+  "name": "MachinaLab",
+  "emitLegacyScripts": true,
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "platforms": {
+        "$path": "src/Machina/src/platforms"
+      },
+      "Config": {
+        "$path": "src/Machina/src/Config.luau"
+      },
+            "net_bridge": {
+        "$path": "src/Machina/src/net_bridge"
+      },
+      "Host": {
+        "$path": "src/Host.rbxmx"
+      }
+    },
+
+    "ServerScriptService": {
+      "GameEnvironment": {
+        "$path": "src/GameEnvironment.server.luau"
+      }
+    }
+  }
+}

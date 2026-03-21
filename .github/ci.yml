@@ -1,0 +1,86 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: machinalab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-build:
+    name: Lint and Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rokit
+        uses: roblox-ts/setup-rokit@main
+        with:
+          cache: true
+
+      - name: Verify tools
+        run: |
+          rokit --version
+          rojo --version
+          selene --version
+          stylua --version
+          rbxcloud --version
+
+      - name: Lint with Selene
+        run: selene src
+
+      - name: Check formatting with StyLua
+        run: stylua --check src
+
+      - name: Build place
+        run: rojo build default.project.json -o MachinaLab.rbxlx
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: machinalab-build
+          path: MachinaLab.rbxlx
+
+  deploy:
+    name: Publish to Roblox
+    runs-on: ubuntu-latest
+    needs: lint-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rokit
+        uses: roblox-ts/setup-rokit@main
+        with:
+          cache: true
+
+      - name: Build release place
+        run: rojo build default.project.json -o MachinaLab.rbxlx
+
+      - name: Publish place with rbxcloud
+        env:
+          RBXCLOUD_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_UNIVERSE_ID: ${{ vars.ROBLOX_UNIVERSE_ID }}
+          ROBLOX_PLACE_ID: ${{ vars.ROBLOX_PLACE_ID }}
+        run: |
+          set -euo pipefail
+
+          # Show CLI info for logs
+          rbxcloud --version
+
+          # Publish using Open Cloud through rbxcloud
+          rbxcloud experience publish-place \
+            --universe-id "$ROBLOX_UNIVERSE_ID" \
+            --place-id "$ROBLOX_PLACE_ID" \
+            --file "MachinaLab.rbxlx"
