@@ -1,6 +1,6 @@
 {
   "name": "MachinaLab",
-  "emitLegacyScripts": true,
+  "emitLegacyScripts": false,
   "tree": {
     "$className": "DataModel",
 
@@ -15,8 +15,21 @@
         "$path": "src/Machina/src/net_bridge"
       },
       "Host": {
-        "$path": "src/Host.rbxmx"
+        "$className": "Folder",
+
+        "Runtime": {
+          "$path": "src/Host.client.luau"
+        },
+
+        "Skyboxes": {
+          "$path": "src/Skyboxes.luau"
+        },
+
+        "TopbarPlus": {
+        "$path": "src/TopbarPlus"
+        }
       }
+
     },
 
     "ServerScriptService": {
