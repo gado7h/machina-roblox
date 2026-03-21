@@ -66,6 +66,7 @@ local function getSkyboxByName(name: string)
 			return sky
 		end
 	end
+	return false
 end
 
 local function createSkyFromData(name: string, data: {[string]: any}): Sky
