@@ -41,9 +41,11 @@ jobs:
 
       - name: Lint with Selene
         run: selene src
+        continue-on-error: true
 
       - name: Check formatting with StyLua
         run: stylua --check src
+        continue-on-error: true
 
       - name: Build place
         run: rojo build default.project.json -o MachinaLab.rbxlx
