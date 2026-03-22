@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'deps/Machina'
+      - 'Machina'
       - '.gitmodules'
       - '.github/workflows/publish.yml'
 
