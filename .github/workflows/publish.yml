@@ -1,0 +1,67 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'deps/Machina'
+      - '.gitmodules'
+      - '.github/workflows/publish.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build, Publish, and Restart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+        with:
+          cache: true
+
+      - name: Install toolchain
+        run: rokit install --no-trust-check
+
+      - name: Build place
+        run: rojo build default.project.json -o MachinaLab.rbxlx
+
+      - name: Publish to Roblox
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_UNIVERSE_ID: ${{ vars.ROBLOX_UNIVERSE_ID }}
+          ROBLOX_PLACE_ID: ${{ vars.ROBLOX_PLACE_ID }}
+        run: |
+          set -euo pipefail
+
+          curl --fail-with-body --request POST \
+            --url "https://apis.roblox.com/universes/v1/${ROBLOX_UNIVERSE_ID}/places/${ROBLOX_PLACE_ID}/versions?versionType=Published" \
+            --header "x-api-key: ${ROBLOX_API_KEY}" \
+            --header "Content-Type: application/octet-stream" \
+            --data-binary @MachinaLab.rbxlx
+
+      - name: Restart live servers
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+          ROBLOX_UNIVERSE_ID: ${{ vars.ROBLOX_UNIVERSE_ID }}
+        run: |
+          set -euo pipefail
+
+          curl --fail-with-body --request POST \
+            --url "https://apis.roblox.com/cloud/v2/universes/${ROBLOX_UNIVERSE_ID}:restartServers" \
+            --header "x-api-key: ${ROBLOX_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --data '{}'
