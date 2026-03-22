@@ -23,10 +23,10 @@
 
         "Skyboxes": {
           "$path": "src/Skyboxes.luau"
+        },
+        "TopbarPlus": {
+          "$path": "Packages/TopbarPlus"
         }
-      },
-      "Packages": {
-        "$path": "Packages"
       }
     },
 

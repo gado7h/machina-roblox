@@ -15,7 +15,7 @@ local deskInstance = workspace:WaitForChild(("%s_DESK"):format(player.Name))
 local cameraPart: Part = deskInstance:WaitForChild("CAM")
 local screen: Part = deskInstance:WaitForChild("SCREEN")
 
-local Icon = require(script.Parent.Parent.Packages.TopbarPlus)
+local Icon = require(script.Parent.TopbarPlus)
 local Skyboxes = require(script.Parent.Skyboxes)
 local remote = script.Parent.Parent:WaitForChild("MachinaRemote") :: RemoteFunction
 
