@@ -34,7 +34,7 @@ local modules = {
 
 local Package = {
 	Name = "machina-roblox",
-	Version = "v0.2.0",
+	Version = "v0.2.6",
 }
 
 Package.EntryPoints = {

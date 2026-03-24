@@ -2,9 +2,9 @@
   "format": "machina-roblox-package/v1",
   "package": "machina-roblox",
   "sourcePackage": "machina",
-  "version": "v0.2.0",
-  "gitRef": "097f2191948d5ffaaae8b958b0b429dbb5d57157",
-  "generatedAtUtc": "2026-03-24T01:58:19.9962789Z",
+  "version": "v0.2.6",
+  "gitRef": "a23a57a096f4a7caf5594e05e0a9cc087cc24aae",
+  "generatedAtUtc": "2026-03-24T07:11:12.1289516Z",
   "consumer": "roblox-host",
   "entrypoints": {
     "config": "src/Config",
