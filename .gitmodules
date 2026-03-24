@@ -1,4 +1,0 @@
-[submodule "Machina"]
-	path = Machina
-	url = https://github.com/gado7h/machina.git
-	branch = main

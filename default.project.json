@@ -5,14 +5,8 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
-      "platforms": {
-        "$path": "Machina/src/platforms"
-      },
-      "Config": {
-        "$path": "Machina/src/Config.luau"
-      },
-      "net_bridge": {
-        "$path": "Machina/src/net_bridge"
+      "machina": {
+        "$path": "vendor/machina"
       },
       "Host": {
         "$className": "Folder",

@@ -1,0 +1,189 @@
+local STATUS_A_UIP = 0x80
+local STATUS_B_24H = 0x02
+local STATUS_B_BINARY = 0x04
+
+local REGISTER_SECONDS = 0x00
+local REGISTER_MINUTES = 0x02
+local REGISTER_HOURS = 0x04
+local REGISTER_WEEKDAY = 0x06
+local REGISTER_DAY = 0x07
+local REGISTER_MONTH = 0x08
+local REGISTER_YEAR = 0x09
+
+local REGISTER_STATUS_A = 0x0A
+local REGISTER_STATUS_B = 0x0B
+local REGISTER_STATUS_C = 0x0C
+local REGISTER_STATUS_D = 0x0D
+
+local CmosRtc = {}
+CmosRtc.__index = CmosRtc
+
+local function toBCD(value)
+	local numericValue = tonumber(value) or 0
+	return ((math.floor(numericValue / 10) % 10) * 16) + (numericValue % 10)
+end
+
+local function weekdayForOsDate(wday)
+	if wday == 1 then
+		return 7
+	end
+	return wday - 1
+end
+
+function CmosRtc.new(config)
+	local self = setmetatable({}, CmosRtc)
+	self.config = config
+	self._index = 0
+	self._nmiMasked = false
+	self._statusA = 0x26
+	self._statusB = STATUS_B_24H
+	self._statusC = 0x00
+	self._statusD = 0x80
+	self.stats = {
+		reads = 0,
+		writes = 0,
+	}
+	return self
+end
+
+function CmosRtc:attachBus(bus)
+	self._bus = bus
+	bus:registerPort(self.config.PORT.RTC_INDEX, function()
+		return bit32.bor(self._index, self._nmiMasked and 0x80 or 0x00)
+	end, function(v)
+		local value = bit32.band(tonumber(v) or 0, 0xFF)
+		self._nmiMasked = bit32.band(value, 0x80) ~= 0
+		self._index = bit32.band(value, 0x7F)
+	end, "CmosRtc Index")
+	bus:registerPort(self.config.PORT.RTC_DATA, function()
+		return self:_readSelected()
+	end, function(v)
+		self:_writeSelected(v)
+	end, "CmosRtc Data")
+end
+
+function CmosRtc:_timeTable()
+	return os.date("*t")
+end
+
+function CmosRtc:_uipActive()
+	return (os.clock() % 1) >= 0.998
+end
+
+function CmosRtc:_binaryMode()
+	return bit32.band(self._statusB, STATUS_B_BINARY) ~= 0
+end
+
+function CmosRtc:_encodeClockValue(value)
+	if self:_binaryMode() then
+		return value % 0x100
+	end
+	return toBCD(value)
+end
+
+function CmosRtc:_readClockRegister(index)
+	local now = self:_timeTable()
+	if index == REGISTER_SECONDS then
+		return self:_encodeClockValue(now.sec)
+	end
+	if index == REGISTER_MINUTES then
+		return self:_encodeClockValue(now.min)
+	end
+	if index == REGISTER_HOURS then
+		return self:_encodeClockValue(now.hour)
+	end
+	if index == REGISTER_WEEKDAY then
+		return self:_encodeClockValue(weekdayForOsDate(now.wday))
+	end
+	if index == REGISTER_DAY then
+		return self:_encodeClockValue(now.day)
+	end
+	if index == REGISTER_MONTH then
+		return self:_encodeClockValue(now.month)
+	end
+	if index == REGISTER_YEAR then
+		return self:_encodeClockValue(now.year % 100)
+	end
+	return nil
+end
+
+function CmosRtc:_readStatusRegister(index)
+	if index == REGISTER_STATUS_A then
+		local value = self._statusA
+		if self:_uipActive() then
+			return bit32.bor(value, STATUS_A_UIP)
+		end
+		return bit32.band(value, bit32.bnot(STATUS_A_UIP))
+	end
+	if index == REGISTER_STATUS_B then
+		return self._statusB
+	end
+	if index == REGISTER_STATUS_C then
+		local value = self._statusC
+		self._statusC = 0
+		return value
+	end
+	if index == REGISTER_STATUS_D then
+		return self._statusD
+	end
+	return nil
+end
+
+function CmosRtc:_readSelected()
+	self.stats.reads = self.stats.reads + 1
+
+	local clockValue = self:_readClockRegister(self._index)
+	if clockValue ~= nil then
+		return clockValue
+	end
+
+	local statusValue = self:_readStatusRegister(self._index)
+	if statusValue ~= nil then
+		return statusValue
+	end
+
+	return 0
+end
+
+function CmosRtc:readRegister(index)
+	local previousIndex = self._index
+	self._index = bit32.band(tonumber(index) or 0, 0x7F)
+	local value = self:_readSelected()
+	self._index = previousIndex
+	return value
+end
+
+function CmosRtc:_writeSelected(value)
+	self.stats.writes = self.stats.writes + 1
+	local v = bit32.band(tonumber(value) or 0, 0xFF)
+	if self._index == REGISTER_STATUS_A then
+		self._statusA = bit32.band(v, 0x7F)
+	elseif self._index == REGISTER_STATUS_B then
+		self._statusB = v
+	elseif self._index == REGISTER_STATUS_C then
+		self._statusC = 0
+	elseif self._index == REGISTER_STATUS_D then
+		self._statusD = bit32.bor(bit32.band(v, 0x7F), 0x80)
+	end
+end
+
+function CmosRtc:getBIOSClockTicks()
+	local now = self:_timeTable()
+	local midnight = os.time({
+		year = now.year,
+		month = now.month,
+		day = now.day,
+		hour = 0,
+		min = 0,
+		sec = 0,
+	})
+	local seconds = math.max(0, os.time(now) - midnight)
+	return math.floor(seconds * 18.20648)
+end
+
+function CmosRtc:getStats()
+	return self.stats
+end
+
+return CmosRtc
+
