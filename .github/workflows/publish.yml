@@ -22,8 +22,6 @@ jobs:
   publish:
     name: Build, Publish, and Restart
     runs-on: ubuntu-latest
-    env:
-      BUILD_OUTPUT: ${{ runner.temp }}/MachinaLab.rbxlx
 
     steps:
       - name: Checkout
@@ -40,7 +38,7 @@ jobs:
         run: rokit install --no-trust-check
 
       - name: Build place
-        run: rojo build default.project.json -o "$BUILD_OUTPUT"
+        run: rojo build default.project.json -o MachinaLab.rbxlx
 
       - name: Publish to Roblox
         env:
@@ -54,7 +52,7 @@ jobs:
             --url "https://apis.roblox.com/universes/v1/${ROBLOX_UNIVERSE_ID}/places/${ROBLOX_PLACE_ID}/versions?versionType=Published" \
             --header "x-api-key: ${ROBLOX_API_KEY}" \
             --header "Content-Type: application/octet-stream" \
-            --data-binary @"${BUILD_OUTPUT}"
+            --data-binary @MachinaLab.rbxlx
 
       - name: Restart live servers
         env:
