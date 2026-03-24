@@ -19,12 +19,12 @@ jobs:
   lint-build:
     name: Lint and Build
     runs-on: ubuntu-latest
+    env:
+      BUILD_OUTPUT: ${{ runner.temp }}/MachinaLab.rbxlx
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          submodules: recursive
           
       - name: Setup Rokit
         uses: CompeyDev/setup-rokit@v0.1.2
@@ -50,10 +50,10 @@ jobs:
         continue-on-error: true
         
       - name: Build place
-        run: rojo build default.project.json -o MachinaLab.rbxlx
+        run: rojo build default.project.json -o "$BUILD_OUTPUT"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: machinalab-build
-          path: MachinaLab.rbxlx
+          path: ${{ env.BUILD_OUTPUT }}

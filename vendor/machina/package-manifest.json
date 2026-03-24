@@ -1,0 +1,53 @@
+{
+  "format": "machina-roblox-package/v1",
+  "package": "machina-roblox",
+  "sourcePackage": "machina",
+  "version": "v0.2.0",
+  "gitRef": "097f2191948d5ffaaae8b958b0b429dbb5d57157",
+  "generatedAtUtc": "2026-03-24T01:58:19.9962789Z",
+  "consumer": "roblox-host",
+  "entrypoints": {
+    "config": "src/Config",
+    "machine": "src/platforms/x86/PcSystem",
+    "platformContracts": "src/platform/Contracts"
+  },
+  "modules": {
+    "src/Config": "src/Config.luau",
+    "src/platform/Contracts": "src/platform/Contracts.luau",
+    "src/platforms/x86/Assembler8086": "src/platforms/x86/Assembler8086.luau",
+    "src/platforms/x86/BiosInterrupts": "src/platforms/x86/BiosInterrupts.luau",
+    "src/platforms/x86/BiosRom": "src/platforms/x86/BiosRom.luau",
+    "src/platforms/x86/BootController": "src/platforms/x86/BootController.luau",
+    "src/platforms/x86/BootImageCatalog": "src/platforms/x86/BootImageCatalog.luau",
+    "src/platforms/x86/BootImageCatalogProductionImages": "src/platforms/x86/BootImageCatalogProductionImages.luau",
+    "src/platforms/x86/BootImageCatalogUtils": "src/platforms/x86/BootImageCatalogUtils.luau",
+    "src/platforms/x86/BootImageCatalogValidationImages": "src/platforms/x86/BootImageCatalogValidationImages.luau",
+    "src/platforms/x86/BootImageLoader": "src/platforms/x86/BootImageLoader.luau",
+    "src/platforms/x86/Cpu80386": "src/platforms/x86/Cpu80386.luau",
+    "src/platforms/x86/Cpu8086": "src/platforms/x86/Cpu8086.luau",
+    "src/platforms/x86/devices/AtaController": "src/platforms/x86/devices/AtaController.luau",
+    "src/platforms/x86/devices/CmosRtc": "src/platforms/x86/devices/CmosRtc.luau",
+    "src/platforms/x86/devices/FirmwareRom": "src/platforms/x86/devices/FirmwareRom.luau",
+    "src/platforms/x86/devices/I8042Controller": "src/platforms/x86/devices/I8042Controller.luau",
+    "src/platforms/x86/devices/PhysicalMemory": "src/platforms/x86/devices/PhysicalMemory.luau",
+    "src/platforms/x86/devices/Pic8259": "src/platforms/x86/devices/Pic8259.luau",
+    "src/platforms/x86/devices/Pit8254": "src/platforms/x86/devices/Pit8254.luau",
+    "src/platforms/x86/devices/SystemBus": "src/platforms/x86/devices/SystemBus.luau",
+    "src/platforms/x86/devices/Uart8250": "src/platforms/x86/devices/Uart8250.luau",
+    "src/platforms/x86/devices/VgaAdapter": "src/platforms/x86/devices/VgaAdapter.luau",
+    "src/platforms/x86/HardwareDiagnostics": "src/platforms/x86/HardwareDiagnostics.luau",
+    "src/platforms/x86/HardwareDiagnosticsState": "src/platforms/x86/HardwareDiagnosticsState.luau",
+    "src/platforms/x86/ImageCatalogUtils": "src/platforms/x86/ImageCatalogUtils.luau",
+    "src/platforms/x86/ImportedImageCatalog": "src/platforms/x86/ImportedImageCatalog.luau",
+    "src/platforms/x86/PcSystem": "src/platforms/x86/PcSystem.luau",
+    "src/platforms/x86/ProtectedModeSelfTest": "src/platforms/x86/ProtectedModeSelfTest.luau",
+    "src/platforms/x86/RawImageCatalog": "src/platforms/x86/RawImageCatalog.luau"
+  },
+  "mountLayout": {
+    "rootName": "machina",
+    "rootType": "Folder",
+    "vendorPath": "vendor/machina",
+    "initModule": "init.luau",
+    "sourceRoot": "src"
+  }
+}

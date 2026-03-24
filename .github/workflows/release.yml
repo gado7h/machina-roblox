@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -16,12 +16,13 @@ jobs:
   release:
     name: Build, Publish, and Restart
     runs-on: ubuntu-latest
+    env:
+      BUILD_OUTPUT: ${{ runner.temp }}/MachinaLab.rbxlx
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - name: Setup Rokit
@@ -33,7 +34,7 @@ jobs:
         run: rokit install --no-trust-check
 
       - name: Build place
-        run: rojo build default.project.json -o MachinaLab.rbxlx
+        run: rojo build default.project.json -o "$BUILD_OUTPUT"
 
       - name: Publish to Roblox
         env:
@@ -47,7 +48,7 @@ jobs:
             --url "https://apis.roblox.com/universes/v1/${ROBLOX_UNIVERSE_ID}/places/${ROBLOX_PLACE_ID}/versions?versionType=Published" \
             --header "x-api-key: ${ROBLOX_API_KEY}" \
             --header "Content-Type: application/octet-stream" \
-            --data-binary @MachinaLab.rbxlx
+            --data-binary @"${BUILD_OUTPUT}"
 
       - name: Restart live servers
         env:
@@ -65,5 +66,5 @@ jobs:
       - name: Create GitHub release and upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: MachinaLab.rbxlx
+          files: ${{ env.BUILD_OUTPUT }}
           generate_release_notes: true

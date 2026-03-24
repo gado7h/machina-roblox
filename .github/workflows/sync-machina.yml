@@ -1,0 +1,67 @@
+name: Sync Machina
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Machina release tag to import, or `latest`
+        required: false
+        default: latest
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-machina
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_OUTPUT: ${{ runner.temp }}/MachinaLab.rbxlx
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Import Machina release
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = "latest"
+          }
+
+          ./scripts/import-machina.ps1 -Version $version
+
+      - name: Setup Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+        with:
+          cache: true
+
+      - name: Install toolchain
+        run: rokit install --no-trust-check
+
+      - name: Validate build
+        run: rojo build default.project.json -o "$BUILD_OUTPUT"
+
+      - name: Read imported version
+        id: imported
+        shell: pwsh
+        run: |
+          $metadata = Get-Content -Raw vendor/machina/.machina-import.json | ConvertFrom-Json
+          "version=$($metadata.version)" >> $env:GITHUB_OUTPUT
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: sync Machina ${{ steps.imported.outputs.version }}"
+          title: "chore: sync Machina ${{ steps.imported.outputs.version }}"
+          body: |
+            Syncs `vendor/machina` from the upstream Machina release `${{ steps.imported.outputs.version }}`.
+          branch: feature/sync-machina
+          delete-branch: true

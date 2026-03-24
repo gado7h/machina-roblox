@@ -19,8 +19,8 @@ local Icon = require(script.Parent.TopbarPlus)
 local Skyboxes = require(script.Parent.Skyboxes)
 local remote = script.Parent.Parent:WaitForChild("MachinaRemote") :: RemoteFunction
 
-local Config = require(script.Parent.Parent.Config)
-local PcSystem = require(script.Parent.Parent.platforms.x86.PcSystem)
+local Config = require(script.Parent.Parent.machina.src.Config)
+local PcSystem = require(script.Parent.Parent.machina.src.platforms.x86.PcSystem)
 
 local DEFAULT_SKYBOX = "Baltic Dune"
 local AUTO_POWER = true
