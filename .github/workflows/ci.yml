@@ -23,7 +23,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-          
+
+      - name: Import Machina
+        shell: pwsh
+        run: ./scripts/import-machina.ps1
+
       - name: Setup Rokit
         uses: CompeyDev/setup-rokit@v0.1.2
         with:
