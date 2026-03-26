@@ -1,4 +1,4 @@
-local root = script.Parent
+local root = script
 local modules = {
 	["@src/Config"] = root.src.Config,
 	["@src/platform/Contracts"] = root.src.platform.Contracts,
