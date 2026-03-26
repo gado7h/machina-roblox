@@ -25,6 +25,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Import Machina
+        shell: pwsh
+        run: ./scripts/import-machina.ps1
+
       - name: Setup Rokit
         uses: CompeyDev/setup-rokit@v0.1.2
         with:
