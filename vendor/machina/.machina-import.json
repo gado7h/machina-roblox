@@ -1,10 +1,10 @@
 {
-    "package":  "machina-roblox",
-    "version":  "v0.3.0",
-    "repository":  "gado7h/Machina",
-    "releaseUrl":  "https://github.com/gado7h/Machina/releases/tag/v0.3.0",
-    "packageAssetUrl":  "https://github.com/gado7h/Machina/releases/download/v0.3.0/machina-roblox-v0.3.0.tar.gz",
-    "metadataAssetUrl":  "https://github.com/gado7h/Machina/releases/download/v0.3.0/machina-release-metadata-v0.3.0.json",
-    "gitRef":  "a23a57a096f4a7caf5594e05e0a9cc087cc24aae",
-    "importedAtUtc":  "2026-03-24T07:19:16.1868886Z"
+  "package": "machina-roblox",
+  "version": "v0.3.1",
+  "repository": "gado7h/Machina",
+  "releaseUrl": "https://github.com/gado7h/machina/releases/tag/v0.3.1",
+  "packageAssetUrl": "https://github.com/gado7h/machina/releases/download/v0.3.1/machina-roblox-v0.3.1.tar.gz",
+  "metadataAssetUrl": "https://github.com/gado7h/machina/releases/download/v0.3.1/machina-release-metadata-v0.3.1.json",
+  "gitRef": "e965a045ccf927a7426cb515a86c45ec47f0aed6",
+  "importedAtUtc": "2026-03-30T05:27:48.2233784Z"
 }

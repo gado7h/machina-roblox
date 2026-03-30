@@ -2,18 +2,18 @@
   "format": "machina-roblox-package/v1",
   "package": "machina-roblox",
   "sourcePackage": "machina",
-  "version": "v0.3.0",
-  "gitRef": "a7d2d5b7a488b19a66601dec5558ac9cf7248e64",
-  "generatedAtUtc": "2026-03-26T04:20:23.0579254Z",
+  "version": "v0.3.1",
+  "gitRef": "e965a045ccf927a7426cb515a86c45ec47f0aed6",
+  "generatedAtUtc": "2026-03-27T13:08:38.7999845Z",
   "consumer": "roblox-host",
   "entrypoints": {
-    "config": "@src/Config",
+    "config": "@src/DefaultConfiguration",
     "machine": "@src/platforms/x86/PcSystem",
-    "platformContracts": "@src/platform/Contracts"
+    "platformContracts": "@src/Contracts"
   },
   "modules": {
-    "@src/Config": "src/Config.luau",
-    "@src/platform/Contracts": "src/platform/Contracts.luau",
+    "@src/Contracts": "src/Contracts.luau",
+    "@src/DefaultConfiguration": "src/DefaultConfiguration.luau",
     "@src/platforms/x86/Assembler8086": "src/platforms/x86/Assembler8086.luau",
     "@src/platforms/x86/BiosInterrupts": "src/platforms/x86/BiosInterrupts.luau",
     "@src/platforms/x86/BiosRom": "src/platforms/x86/BiosRom.luau",

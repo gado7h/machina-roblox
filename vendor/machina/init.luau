@@ -1,7 +1,12 @@
+-- Auto-generated Machina package
+-- Root is script (works for both games and most tools)
+
 local root = script
+
+-- Auto-generated module registry
 local modules = {
-	["@src/Config"] = root.src.Config,
-	["@src/platform/Contracts"] = root.src.platform.Contracts,
+	["@src/Contracts"] = root.src.Contracts,
+	["@src/DefaultConfiguration"] = root.src.DefaultConfiguration,
 	["@src/platforms/x86/Assembler8086"] = root.src.platforms.x86.Assembler8086,
 	["@src/platforms/x86/BiosInterrupts"] = root.src.platforms.x86.BiosInterrupts,
 	["@src/platforms/x86/BiosRom"] = root.src.platforms.x86.BiosRom,
@@ -34,35 +39,79 @@ local modules = {
 
 local Package = {
 	Name = "machina-roblox",
-	Version = "v0.3.0",
+	Version = "v0.3.1",
 }
 
-Package.EntryPoints = {
-	config = modules["@src/Config"],
-	machine = modules["@src/platforms/x86/PcSystem"],
-	platformContracts = modules["@src/platform/Contracts"],
-}
+-- Deep copy a table recursively
+local function deepCopy(original)
+	local copy = {}
+	for key, value in pairs(original) do
+		if type(value) == "table" then
+			copy[key] = deepCopy(value)
+		else
+			copy[key] = value
+		end
+	end
+	return copy
+end
 
-function Package.getModule(moduleId)
+-- Merge overrides into base config
+local function mergeConfig(base, overrides)
+	if not overrides then
+		return deepCopy(base)
+	end
+	local config = deepCopy(base)
+	for key, value in pairs(overrides) do
+		if type(value) == "table" then
+			if config[key] == nil then
+				config[key] = {}
+			end
+			for k, v in pairs(value) do
+				config[key][k] = v
+			end
+		else
+			config[key] = value
+		end
+	end
+	return config
+end
+
+-- Get the default configuration (as function)
+function Package.default()
+	local DefaultConfiguration = Package.require("@src/DefaultConfiguration")
+	return deepCopy(DefaultConfiguration)
+end
+
+-- Build config with overrides
+function Package.build(overrides)
+	local DefaultConfiguration = Package.require("@src/DefaultConfiguration")
+	return mergeConfig(DefaultConfiguration, overrides)
+end
+
+-- Entry points for common dependencies
+Package.machine = modules["@src/platforms/x86/PcSystem"]
+Package.Contracts = modules["@src/Contracts"]
+
+-- Resolve a module ID to a Roblox script instance
+function Package.resolve(moduleId)
 	local moduleScript = modules[moduleId]
-	assert(moduleScript, "machina-roblox: unknown module id " .. tostring(moduleId))
+	assert(moduleScript, "machina: unknown module " .. tostring(moduleId))
 	return moduleScript
 end
 
-function Package.requireById(moduleId)
-	return require(Package.getModule(moduleId))
+-- Require a module by its ID
+function Package.require(moduleId)
+	return require(Package.resolve(moduleId))
 end
 
-function Package.requireConfig()
-	return Package.requireById("@src/Config")
+-- Get the PcSystem machine
+function Package.getMachine()
+	return Package.require("@src/platforms/x86/PcSystem")
 end
 
-function Package.requireMachine()
-	return Package.requireById("@src/platforms/x86/PcSystem")
-end
-
-function Package.requirePlatformContracts()
-	return Package.requireById("@src/platform/Contracts")
+-- Get platform contracts
+function Package.getContracts()
+	return Package.require("@src/Contracts")
 end
 
 return Package
